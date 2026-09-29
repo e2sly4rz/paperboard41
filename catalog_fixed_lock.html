@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5">
+<title>Картонный Экспресс | Каталог игр</title>
+<style>
+  body {
+    margin: 0;
+    padding: 40px 20px;
+    background: #f4f1ea;
+    font-family: sans-serif;
+  }
+
+  .print-sheet {
+    width: 940px;
+    max-width: 100%;
+    margin: 0 auto;
+    background: #f5e6b3;
+    border: 4px solid #d4c39a;
+    border-left: 12px solid #d4c39a;
+    border-right: 12px solid #d4c39a;
+    padding: 28px 36px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.2);
+    position: relative;
+  }
+
+  .print-sheet::before,
+  .print-sheet::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 8px;
+    background-image: radial-gradient(circle at center, transparent 4px, #cfa07a 4.5px);
+    background-size: 16px 16px;
+  }
+  .print-sheet::before { left: -12px; }
+  .print-sheet::after { right: -12px; }
+
+  h2 {
+    text-align: center;
+    color: #222;
+    font-family: "Courier New", Courier, monospace;
+    letter-spacing: 1px;
+    margin-top: 0;
+    text-transform: uppercase;
+  }
+
+  .legend {
+    text-align: center;
+    font-family: "Courier New", Courier, monospace;
+    color: #444;
+    font-size: 14px;
+    margin-bottom: 16px;
+    border-bottom: 1px dashed #ccc;
+    padding-bottom: 8px;
+  }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 16px;
+    font-family: "Courier New", Courier, monospace;
+    font-size: 14px;
+    color: #333;
+  }
+
+  .controls label {
+    font-weight: bold;
+    margin-right: 4px;
+  }
+
+  .controls input[type="text"],
+  .controls select {
+    font-family: "Courier New", Courier, monospace;
+    font-size: 14px;
+    background: #fffaeb;
+    border: 1px solid #c4b380;
+    padding: 4px 8px;
+    color: #222;
+  }
+
+  .controls select {
+    cursor: pointer;
+  }
+
+  .count {
+    font-family: "Courier New", Courier, monospace;
+    font-size: 13px;
+    color: #555;
+    margin-bottom: 10px;
+  }
+
+  .catalog-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: "Courier New", Courier, monospace;
+    font-size: 14px;
+    color: #1a1a1a;
+    table-layout: fixed;
+  }
+
+  .catalog-table th {
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 2px solid #b8a878;
+    color: #333;
+    white-space: nowrap;
+    font-size: 13px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .catalog-table td {
+    padding: 5px 10px;
+    border-bottom: 1px dashed #c9bb88;
+    vertical-align: middle;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .catalog-table tr:hover td {
+    background: #ede0b0;
+  }
+
+  .col-num     { width: 20px; text-align: left; }
+  .catalog-table td.col-name { width: auto; white-space: normal; overflow-wrap: break-word; overflow: visible; text-overflow: clip; }
+  .col-scale   { width: 120px; font-size: 15px; letter-spacing: 1px; }
+  .col-players { width: 70px; text-align: left; }
+  .col-time    { width: 90px; }
+  .col-genre   { width: 110px; }
+  .col-access  { width: 50px; text-align: center; }
+
+  /* === Раскрывающаяся панель дополнений === */
+  .expansion-row td {
+    padding: 0 !important;
+    border: none !important;
+    background: #efe2b5 !important;
+  }
+  .expansion-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.4s ease, padding 0.4s ease;
+    padding: 0 20px;
+    font-family: "Courier New", Courier, monospace;
+    font-size: 13px;
+    color: #333;
+  }
+  .expansion-content.open {
+    max-height: 500px;
+    padding: 8px 20px 12px 20px;
+  }
+  .expansion-content ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .expansion-content li {
+    padding: 2px 0 2px 16px;
+    position: relative;
+  }
+  .expansion-content li::before {
+    content: "•";
+    position: absolute;
+    left: 2px;
+  }
+  .expansion-content .no-exp {
+    font-style: italic;
+    color: #888;
+    padding-left: 0;
+  }
+  .game-row { cursor: pointer; }
+
+  /* ===== ПЛАНШЕТЫ: лёгкая адаптация ===== */
+  @media (max-width: 900px) {
+    .print-sheet {
+      width: 100%;
+      padding: 24px 20px;
+    }
+  }
+
+  /* ===== СМАРТФОНЫ: карточки вместо таблицы ===== */
+  @media (max-width: 640px) {
+    body {
+      padding: 12px 8px;
+    }
+
+    .print-sheet {
+      padding: 18px 14px;
+      border-left: 8px solid #d4c39a;
+      border-right: 8px solid #d4c39a;
+    }
+
+    h2 {
+      font-size: 18px;
+      letter-spacing: 0.5px;
+    }
+
+    .legend {
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    /* --- Фильтры: вертикально, на всю ширину --- */
+    .controls {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 10px;
+    }
+    .controls label {
+      margin-bottom: 2px;
+      font-size: 12px;
+    }
+    .controls input[type="text"],
+    .controls select {
+      width: 100%;
+      font-size: 15px;
+      padding: 8px 10px;
+    }
+
+    /* --- Прячем заголовок таблицы --- */
+    .catalog-table thead { display: none; }
+
+    /* --- Таблица -> карточки --- */
+    .catalog-table,
+    .catalog-table tbody,
+    .catalog-table tr,
+    .catalog-table td {
+      display: block;
+      width: 100%;
+    }
+
+    .catalog-table tr.game-row {
+      position: relative;
+      border: 1px solid #c9bb88;
+      border-radius: 6px;
+      margin-bottom: 8px;
+      padding: 10px 12px;
+      background: #f5e6b3;
+    }
+
+    .catalog-table tr.game-row td {
+      border: none;
+      padding: 2px 0;
+      white-space: normal;
+      overflow: visible;
+      text-overflow: clip;
+    }
+
+    /* Номер и доступ — в одну строку сверху */
+    .catalog-table tr.game-row td.col-num {
+      display: inline-block;
+      width: auto;
+      font-weight: bold;
+      color: #777;
+      font-size: 12px;
+    }
+    .catalog-table tr.game-row td.col-access {
+      position: absolute;
+      top: 10px;
+      right: 12px;
+      font-size: 16px;
+    }
+
+    /* Название игры — крупно */
+    .catalog-table tr.game-row td.col-name {
+      font-weight: bold;
+      font-size: 15px;
+      margin-top: 2px;
+      margin-bottom: 4px;
+    }
+
+    /* Сложность, игроки, время, жанр — в виде "Метка: значение" */
+    .catalog-table tr.game-row td.col-scale::before { content: "Сложность: "; font-weight: bold; font-size: 12px; }
+    .catalog-table tr.game-row td.col-players::before { content: "Игроки: "; font-weight: bold; font-size: 12px; }
+    .catalog-table tr.game-row td.col-time::before { content: "Время: "; font-weight: bold; font-size: 12px; }
+    .catalog-table tr.game-row td.col-genre::before { content: "Жанр: "; font-weight: bold; font-size: 12px; }
+
+    .catalog-table tr.game-row td.col-scale { font-size: 14px; }
+    .catalog-table tr.game-row td.col-players,
+    .catalog-table tr.game-row td.col-time,
+    .catalog-table tr.game-row td.col-genre { font-size: 13px; }
+
+    /* --- Панель дополнений на мобильном --- */
+    .expansion-row td { display: block !important; }
+    .expansion-content { font-size: 13px; }
+    .expansion-content.open { padding: 8px 12px 10px 12px; }
+  }
+</style>
+</head>
+<body>
+<div class="print-sheet">
+  <h2>Картонный Экспресс | Каталог игр</h2>
+  <p class="legend">
+    Шкала сложности: █ — 0.5 балла. 1 балл = █░░░░░░░░, 5 баллов = █████████ &nbsp;·&nbsp; 🔒 — особый вагон
+  </p>
+
+  <div class="controls">
+    <label>Поиск:</label>
+    <input type="text" id="search" placeholder="название игры...">
+  </div>
+  <div class="controls">
+    <label>Сложность:</label>
+    <select id="filter-difficulty">
+      <option value="0">Все</option>
+      <option value="1">1</option>
+      <option value="1.5">1.5</option>
+      <option value="2">2</option>
+      <option value="2.5">2.5</option>
+      <option value="3">3</option>
+      <option value="3.5">3.5</option>
+      <option value="4">4</option>
+      <option value="4.5">4.5</option>
+      <option value="5">5</option>
+    </select>
+    <label>Жанр:</label>
+    <select id="filter-genre">
+      <option value="">Все</option>
+    </select>
+    <label>Игроки:</label>
+    <select id="filter-players">
+      <option value="0">Любое</option>
+      <option value="2">2+</option>
+      <option value="3">3+</option>
+      <option value="4">4+</option>
+      <option value="5">5+</option>
+      <option value="6">6+</option>
+    </select>
+    <label>Доступ:</label>
+    <select id="filter-access">
+      <option value="all">Любой</option>
+      <option value="yes">Особый вагон</option>
+    </select>
+  </div>
+
+  <div class="count" id="count"></div>
+
+  <table class="catalog-table">
+    <thead>
+      <tr>
+        <th class="col-num">№</th>
+        <th class="col-name">Игра</th>
+        <th class="col-scale">Сложность</th>
+        <th class="col-players">Игроки</th>
+        <th class="col-time">Время</th>
+        <th class="col-genre">Жанр</th>
+        <th class="col-access">Доступ</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
+
+<script>
+const games = [
+  ["7 Чудес (2-е издание)", 2, 3, 7, "30 мин", "Стратегия", false, ["7 Wonders (Second Edition): Leaders", "7 Wonders (Second Edition): Cities", "7 Wonders (Second Edition): Armada"]],
+  ["7 Чудес: Архитекторы", 1, 2, 7, "25 мин", "Семейная", false],
+  ["7 Чудес: Дуэль", 2, 2, 2, "30 мин", "Стратегия", false, ["7 Чудес Дуэль: Пантеон"]],
+  ["Азул", 1.5, 2, 4, "30-45 мин", "Абстракт", false],
+  ["Азул: Шоколатье", 1.5, 2, 4, "30-45 мин", "Абстракт", true],
+  ["Акватика", 2, 1, 4, "30-60 мин", "Стратегия", false, ["Акватика: Ледяные воды"]],
+  ["Архитекторы Западного Королевства", 2.5, 1, 5, "60-80 мин", "Стратегия", false],
+  ["Битвы героев", 1.5, 2, 4, "20 мин", "Колодострой", false, ["Битвы героев: Странствия", "Hero Realms: Ancestry", "Hero Realms: The Lost Village Campaign Deck", "Hero Realms: The Ruin of Thandar Campaign Deck", "Hero Realms: Boss Deck – Lich", "Hero Realms: Boss Deck – The Dragon", "Hero Realms: Character Pack – Cleric", "Hero Realms: Character Pack – Fighter", "Hero Realms: Character Pack – Ranger", "Hero Realms: Character Pack – Thief", "Hero Realms: Character Pack – Wizard"]],
+  ["Бумажные кварталы. Коллекционное издание", 2, 1, 6, "25 мин", "Семейная", true],
+  ["Бумажные подземелья", 2, 1, 8, "30 мин", "Семейная", false],
+  ["Викинги", 2.5, 2, 4, "60-80 мин", "Стратегия", false],
+  ["Возрождение", 1.5, 2, 4, "45-60 мин", "Семейная", false],
+  ["Волки", 2.5, 2, 5, "75 мин", "Стратегия", false],
+  ["Голоса в голове", 1.5, 3, 6, "60-120 мин", "Area Majority", false],
+  ["Двор чудес: Королевство парижских бродяг", 2, 2, 5, "40 мин", "Стратегия", false],
+  ["Добро пожаловать на Луну", 2, 1, 6, "25-30 мин", "Семейная", false],
+  ["Дорога приключений", 2, 1, 4, "30-60 мин", "Тематическая", false],
+  ["Дорога ярости: Вендетта - Хром и молнии", 2, 2, 5, "45-75 мин", "Тематическая", false],
+  ["Дорожные работы", 1.5, 1, 4, "45 мин", "Семейная", false, ["Дорожные работы: Деревня", "Дорожные работы: Каналы", "Дорожные работы: Леса", "Дорожные работы: Новые пути", "Дорожные работы: Озёра", "Дорожные работы: Памятники", "Дорожные работы: Пустыня", "Дорожные работы: Энергия"]],
+  ["Дорожные сети: Глубоко-синий", 1, 1, 6, "20-30 мин", "Семейная", false],
+  ["Дорожные сети. Испытание: Сочно-зелёный", 2, 1, 4, "15-30 мин", "Семейная", false],
+  ["Дорожные сети. Испытание: Белстяще-жёлтый", 2, 1, 4, "15-30 мин", "Семейная", false],
+  ["Дорожные сети: Огненно-красный", 1, 1, 6, "20-30 мин", "Семейная", false],
+  ["Забытые моря", 2, 3, 7, "120-240 мин", "Тематическая", true],
+  ["Замки безумного короля Людвига", 2.5, 1, 4, "90 мин", "Стратегия", false, ["Замки безумного короля Людвига. Дополнения"]],
+  ["Замок де Комбо", 1.5, 2, 5, "10-25 мин", "Карточная", false],
+  ["Звёздные капитаны", 2, 1, 4, "25-100 мин", "Стратегия", false],
+  ["Камера! Мотор!", 2, 1, 6, "45-90 мин", "Тематическая", false, ["Камера! Мотор!: Детективные истории", "Камера! Мотор!: Новогодние каникулы", "Камера! Мотор!: Промокарты сцен", "Камера! Мотор!: Супергерои", "Камера! Мотор!: Фильмы категории B", "Камера! Мотор!: Шпионский триллер"]],
+  ["Каркассон: Юбилейное издание", 1.5, 2, 5, "35 мин", "Семейная", false, ["Каркассон: Таверны и соборы"]],
+  ["Картографы", 1.5, 1, 99, "30-45 мин", "Семейная", false],
+  ["Картографы: Герои", 1.5, 1, 99, "30-45 мин", "Семейная", false],
+  ["Карты сокровищ", 1, 2, 4, "20 мин", "Семейная", false],
+  ["Каскадия", 1.5, 1, 4, "30-45 мин", "Абстракт", false, ["Каскадия: Ориентиры"]],
+  ["Киклады: Легендарное издание", 2.5, 2, 6, "60-90 мин", "Стратегия", false, ["Киклады: Легендарное издание - Мальстрём"]],
+  ["La Cosa Nostra", 2.5, 3, 5, "90 мин", "Тематическая", false],
+  ["Колонизаторы", 2, 3, 4, "60-120 мин", "Семейная", false],
+  ["Кольт Экспресс: Большое приключение", 2, 2, 9, "40 мин", " ", false, ["Кольт Экспресс: Курьеры и бронепоезд"]],
+  ["Криптид", 2, 3, 5, "30-50 мин", "Дедукция", false],
+  ["Кровь на часовой башне", 3, 6, 21, "30-120 мин", "Дедукция", true],
+  ["Крутое пике", 2, 2, 2, "20 мин", "Семейная", false, ["Крутое пике: Турбулентность"]],
+  ["Кто накормит Кракена?", 2, 5, 11, "45-90 мин", "Дедукция", false],
+  ["Легенды города гангстеров", 1.5, 1, 4, "30-90 мин", "Кооператив", false],
+  ["Лимпопо", 1, 2, 4, "15 мин", "Карточная", false],
+  ["Марипосас", 2, 2, 5, "45-75 мин", "Семейная", false],
+  ["Место преступления", 2, 1, 4, "60-90 мин", "Детектив", false, ["Место приступления: Нуар", "Место приступления: Тайны Редвью"]],
+  ["Место преступления: Прекрасная эпоха", 1.5, 1, 4, "60-90 мин", "Детектив", false, ["Место приступления: Сквозь века"]],
+  ["Место преступления: Средневековье", 1.5, 1, 4, "60-90 мин", "Детектив", false, ["Место приступления: Сквозь века"]],
+  ["Место преступления: Будущее", 2, 1, 4, "60-90 мин", "Детектив", false, ["Место приступления: Сквозь века"]],
+  ['Миссия "Красная планета"', 2, 2, 6, "45-90 мин", "Стратегия", false],
+  ["Монстры рока", 1.5, 3, 6, "30-60 мин", "Семейная", false],
+  ["Море, соль, бумага", 1.5, 2, 4, "30-45 мин", "Карточная", false, ["Море, соль, бумага: Больше соли"]],
+  ["Омерта", 1, 3, 5, "20 мин", "Карточная", false],
+  ["Опасные гости. Кто убил мистера Уолтона?", 2, 1, 8, "45-75 мин", "Дедукция", false],
+  ["Остров сокровищ: Тайна Джона Сильвера", 2, 2, 5, "45 мин", "Семейная", false, ["Остров сокровищ: Месть Джона Сильвера"]],
+  ["Отвечает Александр Гусь", 1, 2, 10, "15 мин", "Викторина", false],
+  ["Первый контакт", 1.5, 2, 7, "15-40 мин", "Дедукция", false],
+  ["Пикси", 1, 2, 5, "30 мин", "Карточная", false],
+  ["Повелитель Токио: Тёмное издание", 1.5, 2, 6, "30 мин", " ", false],
+  ["Погоня за Авророй", 2.5, 1, 4, "60-90 мин", "Тематическая", false, ["Погоня за Авророй: Проект Афина", "Погоня за Авророй: Мутанты (промо)"]],
+  ["Под прицелом", 2, 2, 5, "20-30 мин", "Семейная", false],
+  ["Покер мертвецов", 1.5, 2, 7, "30 мин", "Карточная", false],
+  ["Покорители троп: Дорожная версия", 1.5, 1, 4, "30 мин", " ", false],
+  ["Придворные", 1, 2, 5, "20-30 мин", "Семейная", false],
+  ["Сквозь грёзы", 2, 2, 4, "30-40 мин", "Семейная", false],
+  ["Тираны Подземья", 2, 2, 4, "90 мин", "Стратегия", false],
+  ["Тортуга 2199", 2.5, 2, 4, "60-90 мин", "Стратегия", false],
+  ["Трон кубов", 2, 2, 4, "20-40 мин", " ", false, ["Трон кубов: Первый сезон - Варвар vs Лунная эльфийка", "Трон кубов: Первый сезон - Монах vs Паладин", "Трон кубов: Первый сезон - Пиромант vs Теневой вор", "Трон кубов: Первый сезон - Энт vs Ниндзя"]],
+  ["Ханаби", 1.5, 2, 5, "25 мин", "Карточная", false],
+  ["Цитадели", 2, 2, 7, "20-60 мин", "Стратегия", false],
+  ["Шёпот за стеной", 2, 2, 4, "30-45 мин", "Тематическая", false],
+  ["Щелчок судьбы", 1, 2, 4, "15-40 мин", "Ловкость", false],
+  ["Экипаж: Погружение в бездну", 2, 2, 5, "20 мин", "Карточная", false],
+];
+
+// === Шкала сложности: 9 символов ===
+function makeScale(score) {
+  const total = 9;
+  const filled = Math.round((score - 0.5) * 2);
+  return '[' + '\u2588'.repeat(filled) + '\u2591'.repeat(total - filled) + ']';
+}
+
+// === Заполняем фильтр по жанрам ===
+const genres = [...new Set(games.map(g => g[5]))].sort();
+const genreSelect = document.getElementById('filter-genre');
+genres.forEach(g => {
+  const opt = document.createElement('option');
+  opt.value = g;
+  opt.textContent = g;
+  genreSelect.appendChild(opt);
+});
+
+// === Рендер таблицы ===
+const tbody = document.getElementById('tbody');
+const countEl = document.getElementById('count');
+const searchInput = document.getElementById('search');
+const diffSelect = document.getElementById('filter-difficulty');
+const genreSel = document.getElementById('filter-genre');
+const playersSelect = document.getElementById('filter-players');
+const accessSelect = document.getElementById('filter-access');
+
+let openRowIndex = -1;
+
+function render() {
+  const q = searchInput.value.toLowerCase().trim();
+  const d = parseFloat(diffSelect.value);
+  const g = genreSel.value;
+  const p = parseInt(playersSelect.value);
+  const a = accessSelect.value;
+
+  const filtered = games
+    .filter(game => {
+      if (q && !game[0].toLowerCase().includes(q)) return false;
+      if (d > 0 && Math.abs(game[1] - d) > 0.01) return false;
+      if (g && game[5] !== g) return false;
+      if (p >  0 && game[3] < p) return false;
+      if (a === 'yes' && !game[6]) return false;
+      if (a === 'no' && game[6]) return false;
+      return true;
+    })
+    .sort((a, b) => a[0].localeCompare(b[0], 'ru'));
+
+  openRowIndex = -1;
+
+  tbody.innerHTML = filtered.map((game, i) => {
+    const scale = makeScale(game[1]);
+    const players = game[2] === game[3] ? `${game[2]}` : `${game[2]}\u2013${game[3]}`;
+    const access = game[6] ? '\uD83D\uDD12' : '';
+    const expansions = game[7] || [];
+
+    let expHtml;
+    if (expansions.length > 0) {
+      expHtml = '<ul>' + expansions.map(e => `<li>${e}</li>`).join('') + '</ul>';
+    } else {
+      expHtml = '<div class="no-exp">Дополнений нет в наличии</div>';
+    }
+
+    return `<tr class="game-row" data-index="${i}">
+      <td class="col-num">${i + 1}</td>
+      <td class="col-name">${game[0]}</td>
+      <td class="col-scale">${scale}</td>
+      <td class="col-players">${players}</td>
+      <td class="col-time">${game[4]}</td>
+      <td class="col-genre">${game[5]}</td>
+      <td class="col-access">${access}</td>
+    </tr>
+    <tr class="expansion-row" data-exp-for="${i}">
+      <td colspan="7">
+        <div class="expansion-content" id="exp-${i}">
+          <strong>Дополнения:</strong><br>
+          ${expHtml}
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  countEl.textContent = `\u041d\u0430\u0439\u0434\u0435\u043d\u043e: ${filtered.length} \u0438\u0437 ${games.length}`;
+
+  // Навешиваем клики
+  tbody.querySelectorAll('.game-row').forEach(row => {
+    row.addEventListener('click', function() {
+      const idx = parseInt(this.dataset.index);
+      const panel = document.getElementById('exp-' + idx);
+
+      if (openRowIndex === idx) {
+        panel.classList.remove('open');
+        openRowIndex = -1;
+      } else {
+        if (openRowIndex >= 0) {
+          const prev = document.getElementById('exp-' + openRowIndex);
+          if (prev) prev.classList.remove('open');
+        }
+        panel.classList.add('open');
+        openRowIndex = idx;
+      }
+    });
+  });
+}
+
+searchInput.addEventListener('input', render);
+diffSelect.addEventListener('change', render);
+genreSel.addEventListener('change', render);
+playersSelect.addEventListener('change', render);
+accessSelect.addEventListener('change', render);
+
+render();
+</script>
+</body>
+</html>
