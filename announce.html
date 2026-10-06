@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Анонс игротеки</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Cutive+Mono&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:  #f3ecd7;
+    --paper2: #e9dfc4;
+    --ink:    #2b2620;
+    --ink-faint: #5a5142;
+    --red:    #b3382c;
+    --blue:   #2b4a7a;
+  }
+
+  *{ margin:0; padding:0; box-sizing:border-box; }
+
+  body{
+    min-height:100vh;
+    background:
+      radial-gradient(ellipse at 20% 10%, rgba(255,255,255,.06), transparent 60%),
+      radial-gradient(ellipse at 80% 90%, rgba(0,0,0,.35), transparent 60%),
+      #2e2a24;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:40px 16px;
+    font-family:'Cutive Mono', 'Courier New', monospace;
+    color:var(--ink);
+  }
+
+  /* ================= БУМАГА ================= */
+  .paper{
+    position:relative;
+    width:min(860px, 100%);
+    background:
+      /* пятна */
+      radial-gradient(circle at 82% 12%, rgba(140,110,60,.14), transparent 12%),
+      radial-gradient(circle at 10% 70%, rgba(120,90,50,.12), transparent 15%),
+      radial-gradient(circle at 60% 85%, rgba(150,120,70,.10), transparent 10%),
+      radial-gradient(circle at 35% 30%, rgba(255,255,255,.35), transparent 45%),
+      linear-gradient(174deg, var(--paper) 0%, var(--paper2) 100%);
+    padding:44px 46px 34px;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,.15) inset,
+      0 30px 60px rgba(0,0,0,.55),
+      0 4px 12px rgba(0,0,0,.4);
+    transform:rotate(-.6deg);
+  }
+
+  /* зерно бумаги */
+  .paper::after{
+    content:"";
+    position:absolute; inset:0;
+    pointer-events:none;
+    background-image:
+      repeating-linear-gradient(0deg, rgba(0,0,0,.022) 0 1px, transparent 1px 3px),
+      repeating-linear-gradient(90deg, rgba(0,0,0,.018) 0 1px, transparent 1px 4px);
+  }
+
+  /* перфорация слева */
+  .punch{ position:absolute; left:-9px; top:0; bottom:0; width:18px; }
+  .punch span{
+    position:absolute; left:0;
+    width:18px; height:18px; border-radius:50%;
+    background:#2e2a24;
+    box-shadow:inset 2px 2px 4px rgba(0,0,0,.6), 0 1px 0 rgba(255,255,255,.2);
+  }
+
+  /* ================= ШАПКА ================= */
+  .doc-type{
+    text-align:center;
+    font-size:11px;
+    letter-spacing:6px;
+    color:var(--ink-faint);
+    text-transform:uppercase;
+  }
+  h1{
+    font-family:'VT323','Courier New',monospace;
+    text-align:center;
+    font-size:clamp(30px, 6vw, 52px);
+    letter-spacing:4px;
+    margin:6px 0 2px;
+    text-transform:uppercase;
+  }
+  .subtitle{
+    text-align:center;
+    font-size:13px;
+    letter-spacing:3px;
+    text-transform:uppercase;
+    color:var(--ink-faint);
+  }
+
+  /* гребёнка из точек — как на матричном принтере */
+  .dotline{
+    height:4px;
+    margin:18px 0 14px;
+    background-image:radial-gradient(circle, var(--ink) 1.2px, transparent 1.4px);
+    background-size:7px 4px;
+    background-repeat:repeat-x;
+    background-position:center;
+    opacity:.75;
+  }
+
+  /* ================= СЕРИЙНЫЕ НОМЕРА ================= */
+  .serials{
+    display:flex;
+    justify-content:space-between;
+    gap:16px;
+    flex-wrap:wrap;
+    font-size:12px;
+    letter-spacing:1px;
+    margin-bottom:18px;
+  }
+  .serials b{ letter-spacing:2px; }
+
+  /* ================= ТАРИФНАЯ СЕТКА ================= */
+  .fields{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:14px 34px;
+    border:2px solid var(--ink);
+    padding:20px 24px 16px;
+    position:relative;
+  }
+  .fields::before{
+    content:"ПРОЕЗДНОЙ ДОКУМЕНТ";
+    position:absolute;
+    top:-9px; left:16px;
+    background:var(--paper);
+    padding:0 8px;
+    font-size:11px;
+    letter-spacing:3px;
+  }
+  .field{ min-width:0; }
+  .field.wide{ grid-column:1 / -1; }
+  .field .label{
+    font-size:10px;
+    letter-spacing:2.5px;
+    text-transform:uppercase;
+    color:var(--ink-faint);
+    margin-bottom:2px;
+  }
+  .field .value{
+    font-family:'VT323','Courier New',monospace;
+    font-size:clamp(20px, 3vw, 28px);
+    letter-spacing:1.5px;
+    text-transform:uppercase;
+    border-bottom:1px dotted var(--ink);
+    padding-bottom:3px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .field .value.big{
+    font-size:clamp(24px, 4.4vw, 38px);
+  }
+  .field .note{
+    font-size:10px;
+    color:var(--ink-faint);
+    margin-top:2px;
+  }
+
+  /* ================= ПРОГРАММА ================= */
+  .program{
+    margin-top:20px;
+    font-size:13.5px;
+    line-height:1.75;
+  }
+  .program h2{
+    font-size:12px;
+    letter-spacing:4px;
+    text-transform:uppercase;
+    color:var(--ink-faint);
+    margin-bottom:8px;
+  }
+  .program ul{ list-style:none; }
+  .program li::before{ content:">> "; color:var(--ink-faint); }
+
+  /* ================= НИЗ БИЛЕТА ================= */
+  .bottom{
+    margin-top:24px;
+    display:flex;
+    align-items:flex-end;
+    justify-content:space-between;
+    gap:18px;
+    flex-wrap:wrap;
+  }
+
+  .stub{
+    border:2px dashed var(--ink);
+    padding:10px 14px;
+    font-size:11px;
+    line-height:1.7;
+    letter-spacing:1px;
+    max-width:300px;
+  }
+  .stub b{ letter-spacing:2px; }
+
+  /* штрих-код */
+  .barcode{ text-align:center; }
+  .bars{
+    height:46px;
+    min-width:200px;
+    background-image:repeating-linear-gradient(90deg,
+      var(--ink) 0 2px, transparent 2px 4px,
+      var(--ink) 4px 5px, transparent 5px 10px,
+      var(--ink) 10px 13px, transparent 13px 15px,
+      var(--ink) 15px 16px, transparent 16px 21px);
+  }
+  .barcode .num{
+    font-size:12px;
+    letter-spacing:4px;
+    margin-top:4px;
+  }
+
+  /* ================= ШТАМП ================= */
+  .stamp{
+    position:absolute;
+    top:96px; right:38px;
+    width:172px; height:172px;
+    border:4px double var(--red);
+    border-radius:50%;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    gap:2px;
+    color:var(--red);
+    transform:rotate(-14deg);
+    opacity:.82;
+    text-align:center;
+    pointer-events:none;
+  }
+  .stamp::before{
+    content:"";
+    position:absolute; inset:7px;
+    border:1.5px solid var(--red);
+    border-radius:50%;
+    opacity:.7;
+  }
+  .stamp .top{
+    font-size:12px; letter-spacing:3px; text-transform:uppercase;
+  }
+  .stamp .mid{
+    font-family:'VT323','Courier New',monospace;
+    font-size:34px; letter-spacing:5px; text-transform:uppercase;
+    line-height:1;
+  }
+  .stamp .bot{
+    font-size:10px; letter-spacing:2px; text-transform:uppercase;
+  }
+  /* слегка «смазанная» печать */
+  .stamp{ filter:url(#none); mix-blend-mode:multiply; }
+
+  .stamp2{
+    position:absolute;
+    bottom:150px; right:60px;
+    border:3px solid var(--blue);
+    color:var(--blue);
+    padding:5px 12px;
+    font-size:13px;
+    letter-spacing:4px;
+    text-transform:uppercase;
+    transform:rotate(7deg);
+    opacity:.55;
+    mix-blend-mode:multiply;
+  }
+
+  /* подписи */
+  .signatures{
+    margin-top:26px;
+    display:flex;
+    justify-content:space-between;
+    gap:20px;
+    flex-wrap:wrap;
+    font-size:11px;
+    letter-spacing:1px;
+    color:var(--ink-faint);
+  }
+  .signatures span{
+    border-top:1px dotted var(--ink-faint);
+    padding-top:4px;
+    min-width:180px;
+  }
+
+  /* линия отрыва */
+  .tear{
+    margin:26px -46px 20px;
+    height:0;
+    border-top:2px dashed var(--ink);
+    opacity:.5;
+  }
+  .counterfoil{
+    font-size:11px;
+    letter-spacing:2px;
+    text-transform:uppercase;
+    color:var(--ink-faint);
+    display:flex;
+    justify-content:space-between;
+    gap:12px;
+    flex-wrap:wrap;
+  }
+
+  @media (max-width:640px){
+    .paper{ padding:30px 22px 24px; }
+    .fields{ grid-template-columns:1fr; }
+    .stamp{ transform:scale(.75) rotate(-14deg); top:70px; right:8px; }
+    .stamp2{ right:10px; bottom:180px; }
+    .tear{ margin-inline:-22px; }
+  }
+
+  @media print{
+    body{ background:#fff; padding:0; }
+    .paper{ transform:none; box-shadow:none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="paper">
+
+  <!-- ОТВЕРСТИЯ ОТ ПОДШИВКИ -->
+  <div class="punch">
+    <span style="top:12%"></span>
+    <span style="top:38%"></span>
+    <span style="top:64%"></span>
+    <span style="top:90%"></span>
+  </div>
+
+  <div class="doc-type">Документ строгой отчётности · формат А-4</div>
+
+  <!-- ========= ШАПКА ========= -->
+  <h1>Анонс игротеки</h1>
+  <div class="subtitle">Билет действителен в игровой вечер · Сдаче и обмену не подлежит</div>
+
+  <div class="dotline"></div>
+
+  <!-- ========= СЕРИЙНЫЕ НОМЕРА ========= -->
+  <div class="serials">
+    <div>СЕРИЯ: <b>ZBC&nbsp;2026</b></div>
+    <div>ДОКУМЕНТ №: <b>А-0001-ОТК</b></div>
+    <div>ПАПКА ДЕЛА: <b>«РАЗВЛЕЧЕНИЯ&nbsp;/&nbsp;СРОЧНО»</b></div>
+    <div>ЭКЗ. ЕДИНСТВЕННЫЙ</div>
+  </div>
+
+  <!-- ========= ОСНОВНОЙ БЛОК ========= -->
+  <div class="fields">
+
+    <div class="field wide">
+      <div class="label">Дата отправления</div>
+      <div class="value big">пятница 09.10.2026</div>
+      <div class="note">* опоздавшие садятся за стол последними</div>
+    </div>
+
+    <div class="field">
+      <div class="label">Перевозчик</div>
+      <div class="value">Картонный Экспресс</div>
+      <div class="note">по согласованию с профсоюзом настольных игр</div>
+    </div>
+
+    <div class="field">
+      <div class="label">Платформа</div>
+      <div class="value">ГЦ Станция</div>
+      <div class="note">указать точный адрес перед печатью</div>
+    </div>
+
+    <div class="field">
+      <div class="label">Время в пути</div>
+      <div class="value">19:00 — 23:00</div>
+      <div class="note">рейс прямое сообщение, без пересадок</div>
+    </div>
+
+    <div class="field">
+      <div class="label">Тариф / вход</div>
+      <div class="value">По подписке</div>
+      <div class="note">*от уровня "Пассажир"</div>
+    </div>
+
+    <div class="field">
+      <div class="label">Класс обслуживания</div>
+      <div class="value">Купе</div>
+      <div class="note">новички обслуживаются приоритетно</div>
+    </div>
+
+  </div>
+
+  <!-- ========= ПРОГРАММА РЕЙСА ========= -->
+  <div class="program">
+    <h2>Маршрут следования рейса</h2>
+    <ul>
+      <li>19:00 — формируется...</li>
+      <li>20:00 — формируется...</li>
+      <li>21:00 — формируется...</li>
+      <li>22:00 — формируется...</li>
+      <li>23:00 — формируется...</li>
+    </ul>
+  </div>
+
+  <!-- ========= ШТАМПЫ ========= -->
+  <div class="stamp">
+    <div class="top">управление досуга</div>
+    <div class="mid">одобрено</div>
+    <div class="bot">к отправке · реестр №41</div>
+  </div>
+
+  <!-- ========= НИЗ ========= -->
+  <div class="bottom">
+    <div class="stub">
+      <b>ПАМЯТКА ПАССАЖИРУ:</b><br>
+      1. предъявить хорошее настроение;<br>
+      2. не терять карты и кубики;<br>
+      3. храп на станции «Монополия» разрешён.
+    </div>
+    <div class="barcode">
+      <div class="bars"></div>
+      <div class="num">ZBC·2026·0001·OTK</div>
+    </div>
+  </div>
+
+  <div class="signatures">
+    <span>Дежурный по платформе: ____________</span>
+    <span>Начальник поезда: ____________</span>
+  </div>
+
+  <div class="tear"></div>
+
+  <div class="counterfoil">
+    <span>КОНТРОЛЬНЫЙ КОРешок: сохраните до конца вечера</span>
+    <span>место для компостера: ⬚⬚⬚⬚</span>
+  </div>
+
+</div>
+
+</body>
+</html>
