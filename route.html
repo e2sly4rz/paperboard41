@@ -125,7 +125,36 @@
             font-size: 12px;
             color: #777;
         }
-    </style>
+
+        .sold-out-overlay {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 100;
+            justify-content: center;
+            align-items: center;
+            pointer-events: none;
+        }
+        .sold-out-overlay.visible {
+            display: flex;
+        }
+        .sold-out-overlay .stamp-text {
+            color: #c00;
+            font-weight: bold;
+            font-size: 42px;
+            text-transform: uppercase;
+            letter-spacing: 6px;
+            transform: rotate(-25deg);
+            opacity: 0.55;
+            border: 6px solid #c00;
+            padding: 15px 40px;
+            border-radius: 8px;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        </style>
 </head>
 <body>
     <div class="ticket-container" id="ticket">
@@ -134,7 +163,7 @@
 
         <div class="header">Маршрутная квитанция</div>
         <div class="meta-info">
-            Перевозчик: «Картонный Экспресс» | Дата отправления: 09.10.2026
+            Перевозчик: «Картонный Экспресс» | Дата отправления: 02.10.2026
         </div>
         <div class="meta-info">
             Платформа: ГЦ «Станция»
@@ -145,6 +174,8 @@
 
         <!-- Вагоны генерируются JavaScript из массива wagons (ниже) -->
         <div id="wagons-container"></div>
+
+        <div class="sold-out-overlay" id="soldOutOverlay"><span class="stamp-text">Свободных мест нет</span></div>
     </div>
 
     <script>
@@ -152,36 +183,18 @@
         {
             name: "Вагон №1",
             rows: [
-                { time: "12:00–13:00", game: "Доббль",          seatsOccupied: 2, seatsTotal: 8 },
-                { time: "13:15–14:15", game: "Имаджинариум",    seatsOccupied: 2, seatsTotal: 7 },
-                { time: "14:30–15:30", game: "Ticket to Ride",  seatsOccupied: 1, seatsTotal: 5 },
-                { time: "15:45–17:15", game: "Пандемия",         seatsOccupied: 2, seatsTotal: 5 },
-                { time: "17:30–18:30", game: "Каркассон",        seatsOccupied: 2, seatsTotal: 4 },
-                { time: "18:45–20:15", game: "Покорение Марса",  seatsOccupied: 1, seatsTotal: 5 }
+                { time: "19:00–20:00", game: "Sushi Go Party!", seatsOccupied: 2, seatsTotal: 8 },
+                { time: "20:00–22:00", game: "Тираны Подземья", seatsOccupied: 2, seatsTotal: 4 },
+                { time: "22:00–23:00", game: "Омерта", seatsOccupied: 2, seatsTotal: 5 },
             ]
         },
         {
             name: "Вагон №2",
             rows: [
-                { time: "12:00–13:00", game: "Доббль",          seatsOccupied: 2, seatsTotal: 8 },
-                { time: "13:15–14:15", game: "Имаджинариум",    seatsOccupied: 2, seatsTotal: 7 },
-                { time: "14:30–15:30", game: "Ticket to Ride",  seatsOccupied: 1, seatsTotal: 5 },
-                { time: "15:45–17:15", game: "Пандемия",         seatsOccupied: 2, seatsTotal: 5 },
-                { time: "17:30–18:30", game: "Каркассон",        seatsOccupied: 2, seatsTotal: 4 },
-                { time: "18:45–20:15", game: "Покорение Марса",  seatsOccupied: 1, seatsTotal: 5 }
+                { time: "19:00–21:00", game: "Шарлатаны из Кведлинбурга", seatsOccupied: 1, seatsTotal: 4 },
+                { time: "21:00–23:00", game: "Правители Флоренции", seatsOccupied: 2, seatsTotal: 5 },
             ]
         },
-        {
-            name: "Вагон №3",
-            rows: [
-                { time: "12:00–13:00", game: "Доббль",          seatsOccupied: 2, seatsTotal: 8 },
-                { time: "13:15–14:15", game: "Имаджинариум",    seatsOccupied: 2, seatsTotal: 7 },
-                { time: "14:30–15:30", game: "Ticket to Ride",  seatsOccupied: 1, seatsTotal: 5 },
-                { time: "15:45–17:15", game: "Пандемия",         seatsOccupied: 2, seatsTotal: 5 },
-                { time: "17:30–18:30", game: "Каркассон",        seatsOccupied: 2, seatsTotal: 4 },
-                { time: "18:45–20:15", game: "Покорение Марса",  seatsOccupied: 1, seatsTotal: 5 }
-            ]
-        }
     ];
 
     function makeSeats(occupied, total) {
@@ -201,7 +214,7 @@
             html += '<div class="wagon-title">' + w.name + '</div>';
             html += '<div class="pseudo-table-header">';
             html += '<span class="col-time">Время в пути</span>';
-            html += '<span class="col-game">Станция</span>';
+            html += '<span class="col-game">Купе</span>';
             html += '<span class="col-seats">Свободные места</span>';
             html += '</div>';
             w.rows.forEach(function(row) {
@@ -216,6 +229,13 @@
     }
 
     renderWagons();
+
+    // --- Плашка "Свободных мест нет" ---
+    const allSoldOut = true; // true — показать плашку, false — скрыть
+    if (allSoldOut) {
+        document.getElementById('soldOutOverlay').classList.add('visible');
+    }
+
     </script>
 </body>
 </html>
