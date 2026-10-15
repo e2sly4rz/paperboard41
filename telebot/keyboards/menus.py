@@ -180,39 +180,10 @@ def games_search_results(night_id: int,
     return kb.as_markup()
 
 
-def games_search_empty(night_id: int,
-                       recent: list[dict]) -> InlineKeyboardMarkup:
-    """Ничего не найдено — показываем последние добавленные игры."""
-    kb = InlineKeyboardBuilder()
-    for g in recent:
-        kb.button(
-            text=g["title"],
-            callback_data=f"addgame:{g['id']}",
-        )
-    kb.button(text="🔍 Искать снова", callback_data=f"hn_add:{night_id}")
-    kb.button(text="❌ Отмена", callback_data=f"hn_sessions:{night_id}")
-    kb.adjust(1)
-    return kb.as_markup()
-
-
 def games_search_create(games: list[dict]) -> InlineKeyboardMarkup:
     """Результаты поиска при создании новой игротеки."""
     kb = InlineKeyboardBuilder()
     for g in games:
-        kb.button(
-            text=g["title"],
-            callback_data=f"pickgame:{g['id']}",
-        )
-    kb.button(text="🔍 Искать снова", callback_data="host_create_search_again")
-    kb.button(text="❌ Отмена", callback_data="host_cancel")
-    kb.adjust(1)
-    return kb.as_markup()
-
-
-def games_search_create_empty(recent: list[dict]) -> InlineKeyboardMarkup:
-    """Ничего не найдено при создании — показываем последние игры."""
-    kb = InlineKeyboardBuilder()
-    for g in recent:
         kb.button(
             text=g["title"],
             callback_data=f"pickgame:{g['id']}",

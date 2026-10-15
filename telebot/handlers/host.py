@@ -22,7 +22,6 @@ from database.queries import (
     count_registrations_for_night,
     get_all_night_registrations,
     search_games,
-    list_recent_games,
 )
 from keyboards.menus import (
     main_menu,
@@ -34,9 +33,6 @@ from keyboards.menus import (
     confirm_delete_session,
     cancel_edit,
     games_search_results,
-    games_search_empty,
-    games_search_create,
-    games_search_create_empty,
     search_prompt_keyboard,
 )
 from states.states import CreateNight, EditNight, AddSessionToNight
@@ -115,33 +111,6 @@ async def create_search_again(call: CallbackQuery, state: FSMContext) -> None:
         reply_markup=search_prompt_keyboard("host_cancel"),
     )
     await call.answer()
-
-
-@router.message(CreateNight.searching_game)
-async def create_search(message: Message, state: FSMContext) -> None:
-    query = message.text.strip()
-    if len(query) < 2:
-        await message.answer("Введите хотя бы 2 символа:")
-        return
-
-    games = await search_games(query, limit=10)
-
-    if not games:
-        recent = await list_recent_games(limit=3)
-        # ВАЖНО: переключаем состояние
-        await state.set_state(CreateNight.picking_game)
-        await message.answer(
-            f"🔍 По запросу «{query}» ничего не найдено.\n\n"
-            f"Последние добавленные игры в каталог:",
-            reply_markup=games_search_create_empty(recent),
-        )
-        return
-
-    await state.set_state(CreateNight.picking_game)
-    await message.answer(
-        f"🔍 Найдено: {len(games)}\n\nВыберите игру:",
-        reply_markup=games_search_create(games),
-    )
 
 
 @router.callback_query(CreateNight.picking_game, F.data.startswith("pickgame:"))
@@ -651,13 +620,11 @@ async def add_game_search(message: Message, state: FSMContext) -> None:
     games = await search_games(query, limit=10)
 
     if not games:
-        recent = await list_recent_games(limit=3)
-        # ВАЖНО: переключаем состояние, чтобы кнопки из списка сработали
-        await state.set_state(AddSessionToNight.picking_game)
+        await state.set_state(AddSessionToNight.searching_game)
         await message.answer(
             f"🔍 По запросу «{query}» ничего не найдено.\n\n"
-            f"Последние добавленные игры:",
-            reply_markup=games_search_empty(night_id, recent),
+            f"Попробуйте другое название:",
+            reply_markup=search_prompt_keyboard(f"hn_sessions:{night_id}"),
         )
         return
 
