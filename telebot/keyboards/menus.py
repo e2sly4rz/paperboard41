@@ -38,7 +38,7 @@ def nights_list(nights: list[dict]) -> InlineKeyboardMarkup:
     for n in nights:
         kb.button(
             text=f"{_fmt_date(n['date'])} • {n['location']} "
-                 f"({n['sessions_count']} игр)",
+                 f"(игр: {n['sessions_count']})",
             callback_data=f"night:{n['id']}",
         )
     kb.button(text="⬅️ Назад", callback_data="back_main")
@@ -109,7 +109,7 @@ def host_nights_list(nights: list[dict]) -> InlineKeyboardMarkup:
     for n in nights:
         kb.button(
             text=f"{_fmt_date(n['date'])} • {n['location']} "
-                 f"({n['sessions_count']} игр, {n['total_taken']} записей)",
+                 f"(игр: {n['sessions_count']}, записей: {n['total_taken']})",
             callback_data=f"hn:{n['id']}",
         )
     kb.button(text="⬅️ Назад", callback_data="host_menu")
