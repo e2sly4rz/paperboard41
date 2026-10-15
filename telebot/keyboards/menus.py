@@ -163,16 +163,6 @@ def cancel_edit(night_id: int) -> InlineKeyboardMarkup:
     kb.adjust(1)
     return kb.as_markup()
 
-def _owner_short(g: dict) -> str:
-    """Короткое имя владельца для кнопки."""
-    if g.get("owner_user_id"):
-        name_parts = [
-            g.get("owner_first_name") or "",
-            g.get("owner_last_name") or "",
-        ]
-        return " ".join(p for p in name_parts if p).strip() or "Хост"
-    return g.get("owner") or "Клуб"
-
 
 def games_search_results(night_id: int,
                          games: list[dict],
@@ -181,7 +171,7 @@ def games_search_results(night_id: int,
     kb = InlineKeyboardBuilder()
     for g in games:
         kb.button(
-            text=f"{g['title']} · {_owner_short(g)}",
+            text=g["title"],
             callback_data=f"{prefix}:{g['id']}",
         )
     kb.button(text="🔍 Искать снова", callback_data=f"hn_add:{night_id}")
@@ -196,7 +186,7 @@ def games_search_empty(night_id: int,
     kb = InlineKeyboardBuilder()
     for g in recent:
         kb.button(
-            text=f"{g['title']} · {_owner_short(g)}",
+            text=g["title"],
             callback_data=f"addgame:{g['id']}",
         )
     kb.button(text="🔍 Искать снова", callback_data=f"hn_add:{night_id}")
@@ -210,7 +200,7 @@ def games_search_create(games: list[dict]) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for g in games:
         kb.button(
-            text=f"{g['title']} · {_owner_short(g)}",
+            text=g["title"],
             callback_data=f"pickgame:{g['id']}",
         )
     kb.button(text="🔍 Искать снова", callback_data="host_create_search_again")
@@ -224,7 +214,7 @@ def games_search_create_empty(recent: list[dict]) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for g in recent:
         kb.button(
-            text=f"{g['title']} · {_owner_short(g)}",
+            text=g["title"],
             callback_data=f"pickgame:{g['id']}",
         )
     kb.button(text="🔍 Искать снова", callback_data="host_create_search_again")

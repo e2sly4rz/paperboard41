@@ -127,7 +127,7 @@ async def create_search(message: Message, state: FSMContext) -> None:
     games = await search_games(query, limit=10)
 
     if not games:
-        recent = await list_recent_games(limit=5)
+        recent = await list_recent_games(limit=3)
         # ВАЖНО: переключаем состояние
         await state.set_state(CreateNight.picking_game)
         await message.answer(
@@ -651,7 +651,7 @@ async def add_game_search(message: Message, state: FSMContext) -> None:
     games = await search_games(query, limit=10)
 
     if not games:
-        recent = await list_recent_games(limit=5)
+        recent = await list_recent_games(limit=3)
         # ВАЖНО: переключаем состояние, чтобы кнопки из списка сработали
         await state.set_state(AddSessionToNight.picking_game)
         await message.answer(

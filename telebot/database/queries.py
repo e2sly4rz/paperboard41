@@ -404,18 +404,18 @@ async def get_all_night_registrations(night_id: int) -> list[dict]:
 # ---------- Поиск игр ----------
 
 async def search_games(query: str, limit: int = 10) -> list[dict]:
-    """Поиск игр по подстроке в названии без учёта регистра.
+    """Гибкий поиск по названию без изменений схемы БД.
 
-    Игры, начинающиеся с запроса, идут первыми.
-    Спецсимволы LIKE экранируются, чтобы '%' в названии не сломал поиск.
+    - регистронезависимый (работает и для кириллицы),
+    - многословный в любом порядке,
+    - ранжирование: точное совпадение → начало названия → слово целиком → в середине.
     """
+    q = query.strip().lower()
+    if not q:
+        return []
+
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
-        safe = (
-            query.replace("\\", "\\\\")
-                 .replace("%", "\\%")
-                 .replace("_", "\\_")
-        )
         cur = await db.execute(
             """SELECT g.*,
                       u.username    AS owner_username,
@@ -423,14 +423,31 @@ async def search_games(query: str, limit: int = 10) -> list[dict]:
                       u.last_name   AS owner_last_name
                FROM games g
                LEFT JOIN users u ON u.telegram_id = g.owner_user_id
-               WHERE g.title LIKE ? ESCAPE '\\'
-               ORDER BY
-                 CASE WHEN g.title LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END,
-                 g.title
-               LIMIT ?""",
-            (f"%{safe}%", f"{safe}%", limit),
+               ORDER BY g.title"""
         )
-        return [dict(r) for r in await cur.fetchall()]
+        games = [dict(r) for r in await cur.fetchall()]
+
+    words = [w for w in q.split() if w]
+
+    scored: list[tuple[int, int, dict]] = []
+    for g in games:
+        title = (g["title"] or "").lower()
+        if not all(w in title for w in words):
+            continue
+
+        if title == q:
+            rank = 0
+        elif title.startswith(q):
+            rank = 1
+        elif any(w in title.split() for w in words):
+            rank = 2
+        else:
+            rank = 3
+
+        scored.append((rank, len(title), g))
+
+    scored.sort(key=lambda x: (x[0], x[1], x[2]["title"]))
+    return [g for _, _, g in scored[:limit]]
 
 
 async def list_recent_games(limit: int = 10) -> list[dict]:
