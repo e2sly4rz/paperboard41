@@ -301,10 +301,12 @@ async def manage_list(call: CallbackQuery) -> None:
         await call.answer()
         return
 
-    own_ids = set()
-    for n in nights:
-        if await _can_manage_night(call.from_user.id, n):
-            own_ids.add(n["id"])
+    # «Свои» — только те, где host_telegram_id == текущий пользователь.
+    # Для админа чужие игротеки остаются с 👀, хотя он может ими управлять.
+    own_ids = {
+        n["id"] for n in nights
+        if n["host_telegram_id"] == call.from_user.id
+    }
 
     await call.message.edit_text(
         "Предстоящие игротеки:",
@@ -640,10 +642,10 @@ async def night_delete_confirm_yes(call: CallbackQuery) -> None:
     await delete_night(night_id)
 
     nights = await list_all_upcoming_nights()
-    own_ids = set()
-    for n in nights:
-        if await _can_manage_night(call.from_user.id, n):
-            own_ids.add(n["id"])
+    own_ids = {
+        n["id"] for n in nights
+        if n["host_telegram_id"] == call.from_user.id
+    }
 
     if not nights:
         await call.message.edit_text(
