@@ -10,14 +10,10 @@ from aiogram.enums import ParseMode
 from config import BOT_TOKEN
 from database.db import init_db
 from handlers import setup_routers
-from middleware.role import RoleMiddleware
 
 
 def build_session() -> AiohttpSession:
-    """
-    Создаёт сессию aiohttp с поддержкой прокси (если задан в окружении).
-    timeout — число секунд, потому что aiogram складывает его с polling_timeout.
-    """
+    """Создаёт сессию aiohttp с поддержкой прокси (если задан в окружении)."""
     proxy_url = os.getenv("HTTPS_PROXY") or os.getenv("HTTP_PROXY")
     timeout_seconds = 40
 
@@ -36,10 +32,8 @@ async def main() -> None:
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
 
-    # Инициализация БД (создание таблиц, наполнение каталога)
     await init_db()
 
-    # Создаём сессию (с прокси или без)
     session = build_session()
 
     bot = Bot(
@@ -49,10 +43,6 @@ async def main() -> None:
     )
 
     dp = Dispatcher()
-
-    # Подгружаем пользователя из БД в data['user'] для всех хендлеров
-    dp.update.middleware(RoleMiddleware())
-
     dp.include_router(setup_routers())
 
     logging.info("Бот запущен, начинаю polling")

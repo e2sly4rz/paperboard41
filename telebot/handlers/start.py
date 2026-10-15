@@ -36,14 +36,14 @@ async def back_main(call: CallbackQuery) -> None:
 
 @router.message(Command("grant"))
 async def grant_host(message: Message) -> None:
-    """Админ может выдать пользователю роль хоста командой:
-       /grant <telegram_id> host|provodnik|guest"""
     if message.from_user.id != ADMIN_ID:
         await message.answer("Недостаточно прав.")
         return
     parts = message.text.split()
     if len(parts) != 3:
-        await message.answer("Использование: /grant <telegram_id> host|provodnik|guest")
+        await message.answer(
+            "Использование: /grant <telegram_id> host|provodnik|guest"
+        )
         return
     try:
         target_id = int(parts[1])
@@ -55,4 +55,6 @@ async def grant_host(message: Message) -> None:
         await message.answer("Уровень должен быть host, provodnik или guest.")
         return
     await set_user_level(target_id, level)
-    await message.answer(f"Пользователю {target_id} установлен уровень {level}.")
+    await message.answer(
+        f"Пользователю {target_id} установлен уровень {level}."
+    )

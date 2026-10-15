@@ -24,7 +24,6 @@ from database.queries import (
 )
 from keyboards.menus import (
     games_picker,
-    confirm_session,
     main_menu,
     host_menu,
     host_nights_list,
@@ -41,13 +40,11 @@ router = Router()
 
 
 async def _is_host(user_id: int) -> bool:
-    """Читает уровень пользователя из БД в момент вызова."""
     user = await get_user(user_id)
     return bool(user and user["subscriber_level"] == "host")
 
 
 def _fmt_date(iso_date: str) -> str:
-    """ГГГГ-ММ-ДД → ДД.ММ.ГГГГ."""
     try:
         return datetime.strptime(iso_date, "%Y-%m-%d").strftime("%d.%m.%Y")
     except (ValueError, TypeError):
@@ -61,10 +58,7 @@ async def open_host_menu(call: CallbackQuery) -> None:
     if not await _is_host(call.from_user.id):
         await call.answer("Только для хостов", show_alert=True)
         return
-    await call.message.edit_text(
-        "Меню организатора:",
-        reply_markup=host_menu(),
-    )
+    await call.message.edit_text("Меню организатора:", reply_markup=host_menu())
     await call.answer()
 
 
@@ -85,7 +79,6 @@ async def start_create(call: CallbackQuery, state: FSMContext) -> None:
 
 @router.message(CreateNight.date)
 async def enter_date(message: Message, state: FSMContext) -> None:
-    # Пользователь вводит ДД.ММ.ГГГГ, в БД храним ГГГГ-ММ-ДД
     try:
         parsed = datetime.strptime(message.text.strip(), "%d.%m.%Y")
     except ValueError:
@@ -102,10 +95,7 @@ async def enter_location(message: Message, state: FSMContext) -> None:
     await state.update_data(location=message.text.strip())
     games = await list_games()
     await state.set_state(CreateNight.picking_game)
-    await message.answer(
-        "Выберите игру из каталога:",
-        reply_markup=games_picker(games),
-    )
+    await message.answer("Выберите игру из каталога:", reply_markup=games_picker(games))
 
 
 @router.callback_query(CreateNight.picking_game, F.data.startswith("pickgame:"))
@@ -158,7 +148,6 @@ async def enter_slots(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
     game = await get_game(data["game_id"])
 
-    # Игротека создаётся один раз, при первой игре.
     night_id = data.get("night_id")
     if night_id is None:
         night_id = await create_game_night(
@@ -191,8 +180,7 @@ async def host_add_more(call: CallbackQuery, state: FSMContext) -> None:
     games = await list_games()
     await state.set_state(CreateNight.picking_game)
     await call.message.edit_text(
-        "Выберите следующую игру:",
-        reply_markup=games_picker(games),
+        "Выберите следующую игру:", reply_markup=games_picker(games)
     )
     await call.answer()
 
@@ -203,8 +191,17 @@ async def host_finish(call: CallbackQuery, state: FSMContext) -> None:
     data = await state.get_data()
     await state.clear()
 
+    if not data.get("night_id"):
+        await call.message.edit_text(
+            "Игротека не создана: не добавлено ни одной игры.",
+            reply_markup=main_menu(is_host),
+        )
+        await call.answer()
+        return
+
     date_display = data.get("date_display", data.get("date", "—"))
     location = data.get("location", "—")
+    ...
 
     await call.message.edit_text(
         f"✅ Игротека на {date_display} ({location}) создана.\n"
@@ -219,8 +216,7 @@ async def host_cancel(call: CallbackQuery, state: FSMContext) -> None:
     is_host = await _is_host(call.from_user.id)
     await state.clear()
     await call.message.edit_text(
-        "Создание игротеки отменено.",
-        reply_markup=main_menu(is_host),
+        "Создание игротеки отменено.", reply_markup=main_menu(is_host)
     )
     await call.answer()
 
@@ -235,14 +231,12 @@ async def manage_list(call: CallbackQuery) -> None:
     nights = await list_host_nights(call.from_user.id)
     if not nights:
         await call.message.edit_text(
-            "У вас нет предстоящих игротек.",
-            reply_markup=host_menu(),
+            "У вас нет предстоящих игротек.", reply_markup=host_menu()
         )
         await call.answer()
         return
     await call.message.edit_text(
-        "Ваши предстоящие игротеки:",
-        reply_markup=host_nights_list(nights),
+        "Ваши предстоящие игротеки:", reply_markup=host_nights_list(nights)
     )
     await call.answer()
 
@@ -283,7 +277,6 @@ async def night_participants(call: CallbackQuery) -> None:
 
     rows = await get_all_night_registrations(night_id)
 
-    # Группируем по session_id, сохраняя порядок (уже отсортирован по времени)
     sessions: dict[int, dict] = {}
     for r in rows:
         sid = r["session_id"]

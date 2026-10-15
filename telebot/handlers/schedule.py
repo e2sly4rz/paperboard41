@@ -9,22 +9,18 @@ from database.queries import (
     get_session,
     register_for_session,
     get_user,
-    get_session_with_host,
-    get_session_registrations,
 )
 from keyboards.menus import (
     nights_list,
     sessions_list,
     session_card,
     main_menu,
-    participants_back,
 )
 
 router = Router()
 
 
 def _fmt_date(iso_date: str) -> str:
-    """ГГГГ-ММ-ДД → ДД.ММ.ГГГГ."""
     try:
         return datetime.strptime(iso_date, "%Y-%m-%d").strftime("%d.%m.%Y")
     except (ValueError, TypeError):
@@ -32,12 +28,9 @@ def _fmt_date(iso_date: str) -> str:
 
 
 async def _is_host(user_id: int) -> bool:
-    """Читает уровень пользователя из БД в момент вызова."""
     user = await get_user(user_id)
     return bool(user and user["subscriber_level"] == "host")
 
-
-# ---------- Список игротек ----------
 
 @router.callback_query(F.data == "schedule")
 async def show_schedule(call: CallbackQuery) -> None:
@@ -56,8 +49,6 @@ async def show_schedule(call: CallbackQuery) -> None:
     )
     await call.answer()
 
-
-# ---------- Список игр в игротеке ----------
 
 @router.callback_query(F.data.startswith("night:"))
 async def show_night(call: CallbackQuery) -> None:
@@ -84,8 +75,6 @@ async def show_night(call: CallbackQuery) -> None:
     await call.answer()
 
 
-# ---------- Карточка сессии ----------
-
 @router.callback_query(F.data.startswith("session:"))
 async def show_session(call: CallbackQuery) -> None:
     session_id = int(call.data.split(":")[1])
@@ -93,12 +82,6 @@ async def show_session(call: CallbackQuery) -> None:
     if not s:
         await call.answer("Сессия не найдена", show_alert=True)
         return
-
-    # Узнаём, хост ли текущий пользователь для этой игротеки
-    meta = await get_session_with_host(session_id)
-    is_own_host = bool(
-        meta and meta["host_telegram_id"] == call.from_user.id
-    )
 
     user = await get_user(call.from_user.id)
     level = user["subscriber_level"] if user else "guest"
@@ -121,57 +104,10 @@ async def show_session(call: CallbackQuery) -> None:
     await call.message.edit_text(
         text,
         parse_mode="HTML",
-        reply_markup=session_card(session_id, can_register, is_own_host),
+        reply_markup=session_card(session_id, can_register),
     )
     await call.answer()
 
-
-# ---------- Список участников (только для хоста) ----------
-
-@router.callback_query(F.data.startswith("participants:"))
-async def show_participants(call: CallbackQuery) -> None:
-    session_id = int(call.data.split(":")[1])
-    meta = await get_session_with_host(session_id)
-    if not meta:
-        await call.answer("Сессия не найдена", show_alert=True)
-        return
-
-    # Смотреть участников может только хост этой игротеки
-    if meta["host_telegram_id"] != call.from_user.id:
-        await call.answer("Только хост видит участников", show_alert=True)
-        return
-
-    regs = await get_session_registrations(session_id)
-
-    header = (
-        f"👥 <b>Участники</b>\n"
-        f"🎲 {meta['title']}\n"
-        f"📅 {_fmt_date(meta['date'])} • {meta['time_start']}–"
-        f"{meta['time_end'] or '?'}\n"
-        f"📍 {meta['location']}\n"
-        f"Занято мест: {meta['slots_taken']} из {meta['max_slots']}\n"
-    )
-
-    if not regs:
-        body = "\nПока никто не записался."
-    else:
-        lines = []
-        for i, r in enumerate(regs, 1):
-            name_parts = [r["first_name"] or "", r["last_name"] or ""]
-            name = " ".join(p for p in name_parts if p).strip() or "Без имени"
-            username = f" (@{r['username']})" if r["username"] else ""
-            lines.append(f"{i}. {name}{username}")
-        body = "\n\n" + "\n".join(lines)
-
-    await call.message.edit_text(
-        header + body,
-        parse_mode="HTML",
-        reply_markup=participants_back(session_id),
-    )
-    await call.answer()
-
-
-# ---------- Запись на игру ----------
 
 @router.callback_query(F.data.startswith("reg:"))
 async def do_register(call: CallbackQuery) -> None:
@@ -183,9 +119,6 @@ async def do_register(call: CallbackQuery) -> None:
         return
 
     s = await get_session(session_id)
-    meta = await get_session_with_host(session_id)
-    is_own_host = bool(meta and meta["host_telegram_id"] == call.from_user.id)
-
     if s:
         taken = s["max_slots"] - s["free_slots"]
         text = (
@@ -199,5 +132,5 @@ async def do_register(call: CallbackQuery) -> None:
         await call.message.edit_text(
             text,
             parse_mode="HTML",
-            reply_markup=session_card(session_id, False, is_own_host),
+            reply_markup=session_card(session_id, False),
         )

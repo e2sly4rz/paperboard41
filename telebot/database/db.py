@@ -64,12 +64,10 @@ CREATE INDEX IF NOT EXISTS idx_sessions_night
 
 
 async def init_db() -> None:
-    """Создаёт таблицы, если их ещё нет, и наполняет каталог примерами."""
     async with aiosqlite.connect(DB_PATH) as db:
         await db.executescript(SCHEMA)
         await db.commit()
 
-        # Демонстрационные игры, если каталог пуст
         cur = await db.execute("SELECT COUNT(*) FROM games")
         (count,) = await cur.fetchone()
         if count == 0:
@@ -86,8 +84,3 @@ async def init_db() -> None:
                 ],
             )
             await db.commit()
-
-
-def get_db():
-    """Возвращает асинхронный контекстный менеджер соединения с БД."""
-    return aiosqlite.connect(DB_PATH)
