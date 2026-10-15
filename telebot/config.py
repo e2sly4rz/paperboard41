@@ -1,6 +1,8 @@
 import os
 from dotenv import load_dotenv
 
+CLUB_TIMEZONE = os.getenv("CLUB_TIMEZONE", "Europe/Moscow")
+
 load_dotenv(override=False)
 
 

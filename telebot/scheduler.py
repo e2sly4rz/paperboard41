@@ -1,16 +1,20 @@
 import logging
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from aiogram import Bot
 from aiogram.exceptions import TelegramForbiddenError, TelegramRetryAfter
 
+from config import CLUB_TIMEZONE
 from database.queries import (
     list_sessions_with_registrations_for_notify,
     was_notification_sent,
     log_notification,
 )
 
+
+_TZ = ZoneInfo(CLUB_TIMEZONE)
 
 scheduler = AsyncIOScheduler()
 
@@ -23,11 +27,12 @@ def _fmt_date(iso_date: str) -> str:
 
 
 def _session_datetime(iso_date: str, time_str: str) -> datetime | None:
-    """Собирает datetime из ISO-даты и 'ЧЧ:ММ'."""
+    """Собирает timezone-aware datetime игры в часовом поясе клуба."""
     try:
         d = datetime.strptime(iso_date, "%Y-%m-%d")
         t = datetime.strptime(time_str, "%H:%M")
-        return d.replace(hour=t.hour, minute=t.minute)
+        naive = d.replace(hour=t.hour, minute=t.minute, second=0, microsecond=0)
+        return naive.replace(tzinfo=_TZ)
     except (ValueError, TypeError):
         return None
 
@@ -49,8 +54,9 @@ async def _notify_user(bot: Bot, user_id: int, text: str) -> bool:
         await bot.send_message(user_id, text)
         return True
     except TelegramForbiddenError:
-        # Пользователь заблокировал бота — больше не пытаемся
-        logging.warning("Напоминание не доставлено: user=%s заблокировал бота", user_id)
+        logging.warning(
+            "Напоминание не доставлено: user=%s заблокировал бота", user_id
+        )
         return False
     except TelegramRetryAfter as e:
         logging.warning("Flood control, retry_after=%s", e.retry_after)
@@ -64,8 +70,9 @@ async def check_and_send_reminders(bot: Bot) -> None:
     """Проходит по ближайшим сессиям и рассылает напоминания.
 
     Запускается планировщиком каждые 10 минут.
+    Все сравнения времени — в часовом поясе клуба (CLUB_TIMEZONE).
     """
-    now = datetime.now()
+    now = datetime.now(_TZ)
     rows = await list_sessions_with_registrations_for_notify()
 
     for row in rows:
@@ -75,7 +82,9 @@ async def check_and_send_reminders(bot: Bot) -> None:
 
         delta = session_dt - now
 
-        # Определяем, какое напоминание сейчас уместно
+        # Определяем, какое напоминание сейчас уместно.
+        # Окна шире интервала планировщика (10 минут),
+        # чтобы не пропустить момент при задержке запуска.
         kind = None
         if timedelta(hours=23) <= delta <= timedelta(hours=25):
             kind = "day_before"
@@ -114,7 +123,11 @@ def start_scheduler(bot: Bot) -> None:
         coalesce=True,
     )
     scheduler.start()
-    logging.info("Планировщик напоминаний запущен (проверка каждые 10 минут)")
+    logging.info(
+        "Планировщик напоминаний запущен "
+        "(проверка каждые 10 минут, часовой пояс: %s)",
+        CLUB_TIMEZONE,
+    )
 
 
 def stop_scheduler() -> None:

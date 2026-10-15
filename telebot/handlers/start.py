@@ -16,6 +16,8 @@ from utils import is_admin
 
 router = Router()
 
+CLUB_NAME = "Картонный Экспресс"
+
 
 @router.message(CommandStart())
 async def cmd_start(message: Message) -> None:
@@ -25,18 +27,19 @@ async def cmd_start(message: Message) -> None:
 
     if is_admin(u.id):
         pending = await list_pending_users()
-        is_host = bool(user and user["subscriber_level"] == "host") or True
         await message.answer(
-            f"👑 Вы администратор.\n\n"
-            f"Заявок на доступ: {len(pending)}",
-            reply_markup=main_menu(is_host, u.id),
+            f"👑 <b>Добро пожаловать, {u.first_name}!</b>\n\n"
+            f"Вы администратор клуба «{CLUB_NAME}».\n"
+            f"Заявок на доступ: <b>{len(pending)}</b>\n\n",
+            reply_markup=main_menu(True, u.id),
         )
         return
 
     if not user["is_approved"]:
         await message.answer(
-            "⏳ Заявка на доступ отправлена.\n\n"
-            "Организатор увидит её и подтвердит доступ.\n\n"
+            f"⏳ <b>Заявка отправлена</b>\n\n"
+            f"Организатор клуба увидит её "
+            f"и подтвердит доступ.\n\n"
             f"Ваш ID: <code>{u.id}</code>"
         )
         try:
@@ -44,7 +47,7 @@ async def cmd_start(message: Message) -> None:
             username = f" (@{u.username})" if u.username else ""
             await message.bot.send_message(
                 ADMIN_ID,
-                f"🔔 Новая заявка на доступ:\n"
+                f"🔔 <b>Новая заявка на доступ</b>\n"
                 f"• <code>{u.id}</code> — {name}{username}\n\n"
                 f"Одобрить: /approve {u.id}",
             )
@@ -53,11 +56,32 @@ async def cmd_start(message: Message) -> None:
         return
 
     is_host = user["subscriber_level"] == "host"
+
+    if is_host:
+        await message.answer(
+            f"🎩 <b>Привет, {u.first_name}!</b>\n\n"
+            f"Добро пожаловать в клуб «{CLUB_NAME}».\n\n"
+            f"Вы — организатор. В разделе «🎩 Меню организатора» "
+            f"можно создавать игротеки, управлять играми "
+            f"и смотреть участников.\n\n"
+            f"А в «📅 Расписание» — записаться на игры других хостов.",
+            reply_markup=main_menu(True, u.id),
+        )
+        return
+
+    provodnik_note = ""
+    if user["subscriber_level"] == "provodnik":
+        provodnik_note = (
+            "\n\n🔒 У вас подписка «Проводник» — "
+            "доступны игры, отмеченные замком."
+        )
+
     await message.answer(
-        f"Привет, {u.first_name}!\n\n"
-        "Это бот клуба настольных игр. Здесь можно посмотреть расписание "
-        "игротек и записаться на игры.",
-        reply_markup=main_menu(is_host, u.id),
+        f"🎲 <b>Привет, {u.first_name}!</b>\n\n"
+        f"Это бот клуба настольных игр «{CLUB_NAME}».\n\n"
+        f"Здесь можно посмотреть расписание игротек "
+        f"и записаться на игры.{provodnik_note}",
+        reply_markup=main_menu(False, u.id),
     )
 
 
@@ -172,8 +196,9 @@ async def cmd_approve(message: Message) -> None:
     try:
         await message.bot.send_message(
             target_id,
-            "✅ Доступ к боту клуба настольных игр открыт. "
-            "Отправьте /start, чтобы начать.",
+            f"✅ <b>Доступ открыт!</b>\n\n"
+            f"Организатор клуба «{CLUB_NAME}» подтвердил вашу заявку.\n"
+            f"Отправьте /start, чтобы начать.",
         )
     except Exception:
         pass
