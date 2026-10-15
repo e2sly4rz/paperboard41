@@ -49,11 +49,12 @@ def nights_list(nights: list[dict]) -> InlineKeyboardMarkup:
 def sessions_list(night_id: int, sessions: list[dict]) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for s in sessions:
-        marker = "🔒 " if s["is_subscriber_only"] else ""
+        lock = "🔒 " if s["is_subscriber_only"] else ""
         taken = s["max_slots"] - s["free_slots"]
+        free = s["free_slots"]
+
         kb.button(
-            text=f"{marker}{s['time_start']} — {s['title']} "
-                 f"({taken}/{s['max_slots']})",
+            text=f"{lock}{s['title']}",
             callback_data=f"session:{s['id']}",
         )
     kb.button(text="⬅️ К расписанию", callback_data="schedule")
