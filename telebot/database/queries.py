@@ -8,8 +8,8 @@ async def ensure_user(telegram_id: int, username: str | None,
                       first_name: str | None, last_name: str | None) -> None:
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
-            """INSERT INTO users (telegram_id, username, first_name, last_name)
-               VALUES (?, ?, ?, ?)
+            """INSERT INTO users (telegram_id, username, first_name, last_name, is_approved)
+               VALUES (?, ?, ?, ?, 0)
                ON CONFLICT(telegram_id) DO UPDATE SET
                    username   = excluded.username,
                    first_name = excluded.first_name,
@@ -17,6 +17,41 @@ async def ensure_user(telegram_id: int, username: str | None,
             (telegram_id, username, first_name, last_name),
         )
         await db.commit()
+
+
+async def approve_user(telegram_id: int) -> bool:
+    """Одобряет доступ. Возвращает True, если пользователь был найден."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "UPDATE users SET is_approved = 1 WHERE telegram_id = ?",
+            (telegram_id,),
+        )
+        await db.commit()
+        return cur.rowcount > 0
+
+
+async def revoke_user(telegram_id: int) -> bool:
+    """Отзывает доступ. Возвращает True, если пользователь был найден."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "UPDATE users SET is_approved = 0 WHERE telegram_id = ?",
+            (telegram_id,),
+        )
+        await db.commit()
+        return cur.rowcount > 0
+
+
+async def list_pending_users() -> list[dict]:
+    """Список пользователей, ожидающих одобрения."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            """SELECT telegram_id, username, first_name, last_name, created_at
+               FROM users
+               WHERE is_approved = 0
+               ORDER BY created_at"""
+        )
+        return [dict(r) for r in await cur.fetchall()]
 
 
 async def get_user(telegram_id: int) -> dict | None:

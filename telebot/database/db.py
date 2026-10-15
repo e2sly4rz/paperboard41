@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
     first_name       TEXT,
     last_name        TEXT,
     subscriber_level TEXT DEFAULT 'guest',
+    is_approved      INTEGER DEFAULT 0,
     created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -63,24 +64,23 @@ CREATE INDEX IF NOT EXISTS idx_sessions_night
 """
 
 
+async def _migrate_add_is_approved(db: aiosqlite.Connection) -> None:
+    """Добавляет колонку is_approved, если её нет.
+
+    Нужно, потому что CREATE TABLE IF NOT EXISTS не меняет структуру
+    существующей таблицы. Для старых БД поле добавляется через ALTER.
+    """
+    cur = await db.execute("PRAGMA table_info(users)")
+    columns = [row[1] for row in await cur.fetchall()]
+    if "is_approved" not in columns:
+        await db.execute(
+            "ALTER TABLE users ADD COLUMN is_approved INTEGER DEFAULT 0"
+        )
+        await db.commit()
+
+
 async def init_db() -> None:
     async with aiosqlite.connect(DB_PATH) as db:
         await db.executescript(SCHEMA)
         await db.commit()
-
-        cur = await db.execute("SELECT COUNT(*) FROM games")
-        (count,) = await cur.fetchone()
-        if count == 0:
-            await db.executemany(
-                """INSERT INTO games
-                   (title, genre, min_players, max_players, owner,
-                    duration_min, duration_max, is_subscriber_only)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                [
-                    ("Catan", "Стратегия", 3, 4, "Клуб", 60, 120, 0),
-                    ("Codenames", "Вечеринка", 4, 8, "Клуб", 15, 30, 0),
-                    ("Gloomhaven", "Кооперативная", 1, 4, "Клуб", 90, 180, 1),
-                    ("Ticket to Ride", "Семейная", 2, 5, "Клуб", 45, 75, 0),
-                ],
-            )
-            await db.commit()
+        await _migrate_add_is_approved(db)

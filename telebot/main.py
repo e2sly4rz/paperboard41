@@ -10,10 +10,10 @@ from aiogram.enums import ParseMode
 from config import BOT_TOKEN
 from database.db import init_db
 from handlers import setup_routers
+from middleware.access import AccessMiddleware
 
 
 def build_session() -> AiohttpSession:
-    """Создаёт сессию aiohttp с поддержкой прокси (если задан в окружении)."""
     proxy_url = os.getenv("HTTPS_PROXY") or os.getenv("HTTP_PROXY")
     timeout_seconds = 40
 
@@ -35,7 +35,6 @@ async def main() -> None:
     await init_db()
 
     session = build_session()
-
     bot = Bot(
         token=BOT_TOKEN,
         session=session,
@@ -43,6 +42,10 @@ async def main() -> None:
     )
 
     dp = Dispatcher()
+
+    # AccessMiddleware первым — отсекает чужих до всех хендлеров
+    dp.update.middleware(AccessMiddleware())
+
     dp.include_router(setup_routers())
 
     logging.info("Бот запущен, начинаю polling")
