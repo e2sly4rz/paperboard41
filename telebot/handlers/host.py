@@ -4,10 +4,10 @@ import aiosqlite
 from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from config import DB_PATH
 from database.queries import (
-    list_games,
     get_game,
     get_user,
     create_game_night,
@@ -21,9 +21,10 @@ from database.queries import (
     delete_session,
     count_registrations_for_night,
     get_all_night_registrations,
+    search_games,
+    list_recent_games,
 )
 from keyboards.menus import (
-    games_picker,
     main_menu,
     host_menu,
     host_nights_list,
@@ -32,7 +33,11 @@ from keyboards.menus import (
     confirm_delete_night,
     confirm_delete_session,
     cancel_edit,
-    games_picker_for_night,
+    games_search_results,
+    games_search_empty,
+    games_search_create,
+    games_search_create_empty,
+    search_prompt_keyboard,
 )
 from states.states import CreateNight, EditNight, AddSessionToNight
 
@@ -93,9 +98,48 @@ async def enter_date(message: Message, state: FSMContext) -> None:
 @router.message(CreateNight.location)
 async def enter_location(message: Message, state: FSMContext) -> None:
     await state.update_data(location=message.text.strip())
-    games = await list_games()
+    await state.set_state(CreateNight.searching_game)
+    await message.answer(
+        "🔍 <b>Поиск игры</b>\n\n"
+        "Введите название или его часть (например, <code>catan</code>):",
+        parse_mode="HTML",
+        reply_markup=search_prompt_keyboard("host_cancel"),
+    )
+
+
+@router.callback_query(F.data == "host_create_search_again")
+async def create_search_again(call: CallbackQuery, state: FSMContext) -> None:
+    await state.set_state(CreateNight.searching_game)
+    await call.message.edit_text(
+        "🔍 Введите название или его часть:",
+        reply_markup=search_prompt_keyboard("host_cancel"),
+    )
+    await call.answer()
+
+
+@router.message(CreateNight.searching_game)
+async def create_search(message: Message, state: FSMContext) -> None:
+    query = message.text.strip()
+    if len(query) < 2:
+        await message.answer("Введите хотя бы 2 символа:")
+        return
+
+    games = await search_games(query, limit=10)
+
+    if not games:
+        recent = await list_recent_games(limit=10)
+        await message.answer(
+            f"🔍 По запросу «{query}» ничего не найдено.\n\n"
+            f"Последние добавленные игры в каталог:",
+            reply_markup=games_search_create_empty(recent),
+        )
+        return
+
     await state.set_state(CreateNight.picking_game)
-    await message.answer("Выберите игру из каталога:", reply_markup=games_picker(games))
+    await message.answer(
+        f"🔍 Найдено: {len(games)}\n\nВыберите игру:",
+        reply_markup=games_search_create(games),
+    )
 
 
 @router.callback_query(CreateNight.picking_game, F.data.startswith("pickgame:"))
@@ -163,60 +207,73 @@ async def enter_slots(message: Message, state: FSMContext) -> None:
         slots,
     )
 
+    # Показываем, что добавлено, и предлагаем добавить ещё или завершить
     date_display = data.get("date_display", data["date"])
     text = (
-        f"Добавлена игра «{game['title']}» "
+        f"✅ Добавлена игра «{game['title']}» "
         f"({data['time_start']}–{data['time_end']}), мест: {slots}.\n\n"
-        f"Игротека: {date_display}, {data['location']}."
+        f"Игротека: {date_display}, {data['location']}.\n\n"
+        f"Что дальше?"
     )
 
-    await state.set_state(CreateNight.picking_game)
-    games = await list_games()
-    await message.answer(text, reply_markup=games_picker(games))
+    # Очищаем выбор игры, но сохраняем night_id, дату, место
+    await state.update_data(game_id=None, time_start=None, time_end=None, slots=None)
+    await state.set_state(CreateNight.searching_game)
+
+    # Клавиатура: добавить ещё / завершить
+    kb = InlineKeyboardBuilder()
+    kb.button(text="➕ Добавить ещё игру", callback_data="host_add_more")
+    kb.button(text="✅ Завершить создание", callback_data="host_finish")
+    kb.button(text="❌ Отмена", callback_data="host_cancel")
+    kb.adjust(1)
+
+    await message.answer(text, reply_markup=kb.as_markup())
 
 
 @router.callback_query(F.data == "host_add_more")
 async def host_add_more(call: CallbackQuery, state: FSMContext) -> None:
-    games = await list_games()
-    await state.set_state(CreateNight.picking_game)
+    await state.set_state(CreateNight.searching_game)
     await call.message.edit_text(
-        "Выберите следующую игру:", reply_markup=games_picker(games)
+        "🔍 Введите название игры или его часть:",
+        reply_markup=search_prompt_keyboard("host_finish"),
     )
     await call.answer()
 
 
 @router.callback_query(F.data == "host_finish")
 async def host_finish(call: CallbackQuery, state: FSMContext) -> None:
-    is_host = await _is_host(call.from_user.id)
+    user = await get_user(call.from_user.id)
+    is_host = bool(user and user["subscriber_level"] == "host")
     data = await state.get_data()
     await state.clear()
 
     if not data.get("night_id"):
         await call.message.edit_text(
             "Игротека не создана: не добавлено ни одной игры.",
-            reply_markup=main_menu(is_host),
+            reply_markup=main_menu(is_host, call.from_user.id),
         )
         await call.answer()
         return
 
     date_display = data.get("date_display", data.get("date", "—"))
     location = data.get("location", "—")
-    ...
 
     await call.message.edit_text(
         f"✅ Игротека на {date_display} ({location}) создана.\n"
         f"Игроки смогут увидеть её в разделе «Расписание».",
-        reply_markup=main_menu(is_host),
+        reply_markup=main_menu(is_host, call.from_user.id),
     )
     await call.answer()
 
 
 @router.callback_query(F.data == "host_cancel")
 async def host_cancel(call: CallbackQuery, state: FSMContext) -> None:
-    is_host = await _is_host(call.from_user.id)
+    user = await get_user(call.from_user.id)
+    is_host = bool(user and user["subscriber_level"] == "host")
     await state.clear()
     await call.message.edit_text(
-        "Создание игротеки отменено.", reply_markup=main_menu(is_host)
+        "Создание игротеки отменено.",
+        reply_markup=main_menu(is_host, call.from_user.id),
     )
     await call.answer()
 
@@ -241,7 +298,7 @@ async def manage_list(call: CallbackQuery) -> None:
     await call.answer()
 
 
-# ============ КАРТОЧКА ИГРОТЕКИ ============
+# ============ КАРТОЧКА ИГРОТЕКИ (С УЧАСТНИКАМИ) ============
 
 @router.callback_query(F.data.startswith("hn:"))
 async def night_card(call: CallbackQuery) -> None:
@@ -254,8 +311,8 @@ async def night_card(call: CallbackQuery) -> None:
         await call.answer("Это не ваша игротека", show_alert=True)
         return
 
-    # Собираем участников
     rows = await get_all_night_registrations(night_id)
+
     sessions: dict[int, dict] = {}
     for r in rows:
         sid = r["session_id"]
@@ -275,7 +332,6 @@ async def night_card(call: CallbackQuery) -> None:
                 "username": r["username"],
             })
 
-    # Шапка карточки
     lines = [
         "🎲 <b>Игротека</b>",
         f"📅 {_fmt_date(night['date'])}",
@@ -283,7 +339,6 @@ async def night_card(call: CallbackQuery) -> None:
         f"Игр: {night['sessions_count']} • Записей: {night['total_taken']}",
     ]
 
-    # Блок участников
     if not sessions:
         lines.append("\n<i>В этой игротеке пока нет игр.</i>")
     else:
@@ -305,7 +360,6 @@ async def night_card(call: CallbackQuery) -> None:
 
     text = "\n".join(lines)
 
-    # Telegram ограничивает сообщение 4096 символами
     if len(text) > 4000:
         text = text[:3990] + "\n\n<i>…список обрезан</i>"
 
@@ -413,7 +467,6 @@ async def sessions_manage(call: CallbackQuery) -> None:
         return
 
     sessions = await get_night_sessions_for_edit(night_id)
-
     if not sessions:
         await call.message.edit_text(
             f"🎲 Игротека\n"
@@ -559,6 +612,7 @@ async def night_delete_confirm_yes(call: CallbackQuery) -> None:
         )
     await call.answer("Игротека удалена")
 
+
 # ============ ДОБАВЛЕНИЕ ИГРЫ В СУЩЕСТВУЮЩУЮ ИГРОТЕКУ ============
 
 @router.callback_query(F.data.startswith("hn_add:"))
@@ -570,23 +624,44 @@ async def add_game_start(call: CallbackQuery, state: FSMContext) -> None:
         return
 
     await state.clear()
-    await state.set_state(AddSessionToNight.picking_game)
+    await state.set_state(AddSessionToNight.searching_game)
     await state.update_data(night_id=night_id)
 
-    games = await list_games()
-    if not games:
-        await call.message.edit_text(
-            "Каталог игр пуст. Добавьте игры через администратора.",
-            reply_markup=host_night_card(night_id),
-        )
-        await call.answer()
-        return
-
     await call.message.edit_text(
-        "Выберите игру для добавления:",
-        reply_markup=games_picker_for_night(night_id, games),
+        "🔍 <b>Поиск игры</b>\n\n"
+        "Введите название или его часть (например, <code>catan</code>):",
+        parse_mode="HTML",
+        reply_markup=search_prompt_keyboard(f"hn_sessions:{night_id}"),
     )
     await call.answer()
+
+
+@router.message(AddSessionToNight.searching_game)
+async def add_game_search(message: Message, state: FSMContext) -> None:
+    query = message.text.strip()
+    if len(query) < 2:
+        await message.answer("Введите хотя бы 2 символа:")
+        return
+
+    data = await state.get_data()
+    night_id = data["night_id"]
+
+    games = await search_games(query, limit=10)
+
+    if not games:
+        recent = await list_recent_games(limit=10)
+        await message.answer(
+            f"🔍 По запросу «{query}» ничего не найдено.\n\n"
+            f"Последние добавленные игры:",
+            reply_markup=games_search_empty(night_id, recent),
+        )
+        return
+
+    await state.set_state(AddSessionToNight.picking_game)
+    await message.answer(
+        f"🔍 Найдено: {len(games)}\n\nВыберите игру:",
+        reply_markup=games_search_results(night_id, games),
+    )
 
 
 @router.callback_query(AddSessionToNight.picking_game, F.data.startswith("addgame:"))
@@ -646,12 +721,15 @@ async def add_game_slots(message: Message, state: FSMContext) -> None:
 
     game = await get_game(game_id)
     night = await get_night(night_id)
-
-    # Показываем обновлённый экран управления играми
     sessions = await get_night_sessions_for_edit(night_id)
+
     text = (
         f"✅ Игра «{game['title']}» добавлена в игротеку.\n"
         f"📅 {_fmt_date(night['date'])} • {night['location']}\n\n"
-        f"Нажмите на игру, чтобы удалить её из игротеки:"
+        f"Нажмите 🗑 на игре, чтобы удалить её, "
+        f"или ➕, чтобы добавить ещё:"
     )
-    await message.answer(text, reply_markup=host_sessions_list(night_id, sessions))
+    await message.answer(
+        text,
+        reply_markup=host_sessions_list(night_id, sessions),
+    )

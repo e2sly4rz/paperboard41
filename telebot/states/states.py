@@ -4,6 +4,7 @@ from aiogram.fsm.state import State, StatesGroup
 class CreateNight(StatesGroup):
     date = State()
     location = State()
+    searching_game = State()
     picking_game = State()
     time_start = State()
     time_end = State()
@@ -16,7 +17,7 @@ class EditNight(StatesGroup):
 
 
 class AddSessionToNight(StatesGroup):
-    """Добавление игры в уже существующую игротеку."""
+    searching_game = State()
     picking_game = State()
     time_start = State()
     time_end = State()

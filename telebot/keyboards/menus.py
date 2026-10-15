@@ -141,27 +141,6 @@ def host_sessions_list(night_id: int, sessions: list[dict]) -> InlineKeyboardMar
     return kb.as_markup()
 
 
-def games_picker_for_night(night_id: int, games: list[dict]) -> InlineKeyboardMarkup:
-    """Выбор игры для добавления в существующую игротеку."""
-    kb = InlineKeyboardBuilder()
-    for g in games:
-        if g.get("owner_user_id"):
-            name_parts = [
-                g.get("owner_first_name") or "",
-                g.get("owner_last_name") or "",
-            ]
-            owner = " ".join(p for p in name_parts if p).strip() or "Хост"
-        else:
-            owner = g.get("owner") or "Клуб"
-        kb.button(
-            text=f"{g['title']} · {owner}",
-            callback_data=f"addgame:{g['id']}",
-        )
-    kb.button(text="❌ Отмена", callback_data=f"hn_sessions:{night_id}")
-    kb.adjust(1)
-    return kb.as_markup()
-
-
 def confirm_delete_night(night_id: int) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.button(text="🗑 Да, удалить", callback_data=f"hn_del_yes:{night_id}")
@@ -181,5 +160,82 @@ def confirm_delete_session(session_id: int, night_id: int) -> InlineKeyboardMark
 def cancel_edit(night_id: int) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.button(text="❌ Отмена", callback_data=f"hn:{night_id}")
+    kb.adjust(1)
+    return kb.as_markup()
+
+def _owner_short(g: dict) -> str:
+    """Короткое имя владельца для кнопки."""
+    if g.get("owner_user_id"):
+        name_parts = [
+            g.get("owner_first_name") or "",
+            g.get("owner_last_name") or "",
+        ]
+        return " ".join(p for p in name_parts if p).strip() or "Хост"
+    return g.get("owner") or "Клуб"
+
+
+def games_search_results(night_id: int,
+                         games: list[dict],
+                         prefix: str = "addgame") -> InlineKeyboardMarkup:
+    """Результаты поиска при добавлении игры в существующую игротеку."""
+    kb = InlineKeyboardBuilder()
+    for g in games:
+        kb.button(
+            text=f"{g['title']} · {_owner_short(g)}",
+            callback_data=f"{prefix}:{g['id']}",
+        )
+    kb.button(text="🔍 Искать снова", callback_data=f"hn_add:{night_id}")
+    kb.button(text="❌ Отмена", callback_data=f"hn_sessions:{night_id}")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def games_search_empty(night_id: int,
+                       recent: list[dict]) -> InlineKeyboardMarkup:
+    """Ничего не найдено — показываем последние добавленные игры."""
+    kb = InlineKeyboardBuilder()
+    for g in recent:
+        kb.button(
+            text=f"{g['title']} · {_owner_short(g)}",
+            callback_data=f"addgame:{g['id']}",
+        )
+    kb.button(text="🔍 Искать снова", callback_data=f"hn_add:{night_id}")
+    kb.button(text="❌ Отмена", callback_data=f"hn_sessions:{night_id}")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def games_search_create(games: list[dict]) -> InlineKeyboardMarkup:
+    """Результаты поиска при создании новой игротеки."""
+    kb = InlineKeyboardBuilder()
+    for g in games:
+        kb.button(
+            text=f"{g['title']} · {_owner_short(g)}",
+            callback_data=f"pickgame:{g['id']}",
+        )
+    kb.button(text="🔍 Искать снова", callback_data="host_create_search_again")
+    kb.button(text="❌ Отмена", callback_data="host_cancel")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def games_search_create_empty(recent: list[dict]) -> InlineKeyboardMarkup:
+    """Ничего не найдено при создании — показываем последние игры."""
+    kb = InlineKeyboardBuilder()
+    for g in recent:
+        kb.button(
+            text=f"{g['title']} · {_owner_short(g)}",
+            callback_data=f"pickgame:{g['id']}",
+        )
+    kb.button(text="🔍 Искать снова", callback_data="host_create_search_again")
+    kb.button(text="❌ Отмена", callback_data="host_cancel")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def search_prompt_keyboard(cancel_callback: str) -> InlineKeyboardMarkup:
+    """Клавиатура под подсказкой поиска — только кнопка «Отмена»."""
+    kb = InlineKeyboardBuilder()
+    kb.button(text="❌ Отмена", callback_data=cancel_callback)
     kb.adjust(1)
     return kb.as_markup()
