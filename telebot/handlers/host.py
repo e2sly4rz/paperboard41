@@ -7,6 +7,7 @@ from aiogram.types import CallbackQuery, Message
 from database.queries import (
     list_games,
     get_game,
+    get_user,
     create_game_night,
     add_session,
 )
@@ -16,32 +17,44 @@ from states.states import CreateNight
 router = Router()
 
 
-def _is_host(user: dict | None) -> bool:
+async def _is_host(user_id: int) -> bool:
+    """Читает уровень пользователя из БД в момент вызова."""
+    user = await get_user(user_id)
     return bool(user and user["subscriber_level"] == "host")
 
 
+# ---------- Создание игротеки ----------
+
 @router.callback_query(F.data == "host_create")
-async def start_create(call: CallbackQuery, state: FSMContext,
-                       user: dict | None = None) -> None:
-    if not _is_host(user):
-        await call.answer("Только хосты могут создавать игротеки", show_alert=True)
+async def start_create(call: CallbackQuery, state: FSMContext) -> None:
+    if not await _is_host(call.from_user.id):
+        await call.answer(
+            "Только хосты могут создавать игротеки",
+            show_alert=True,
+        )
         return
     await state.clear()
     await state.set_state(CreateNight.date)
     await call.message.edit_text(
-        "Создание игротеки.\n\nВведите дату в формате ГГГГ-ММ-ДД:"
+        "Создание игротеки.\n\nВведите дату в формате ДД.ММ.ГГГГ:"
     )
     await call.answer()
 
 
+# ---------- Пошаговый ввод ----------
+
 @router.message(CreateNight.date)
 async def enter_date(message: Message, state: FSMContext) -> None:
+    # Пользователь вводит ДД.ММ.ГГГГ, в БД храним ГГГГ-ММ-ДД
     try:
-        datetime.strptime(message.text.strip(), "%Y-%m-%d")
+        parsed = datetime.strptime(message.text.strip(), "%d.%m.%Y")
     except ValueError:
-        await message.answer("Неверный формат. Введите дату как ГГГГ-ММ-ДД:")
+        await message.answer(
+            "Неверный формат. Введите дату как ДД.ММ.ГГГГ:"
+        )
         return
-    await state.update_data(date=message.text.strip())
+    await state.update_data(date=parsed.strftime("%Y-%m-%d"))
+    await state.update_data(date_display=parsed.strftime("%d.%m.%Y"))
     await state.set_state(CreateNight.location)
     await message.answer("Введите место проведения:")
 
@@ -89,7 +102,9 @@ async def enter_time_end(message: Message, state: FSMContext) -> None:
         return
     data = await state.get_data()
     if message.text.strip() <= data["time_start"]:
-        await message.answer("Время окончания должно быть позже начала. Повторите:")
+        await message.answer(
+            "Время окончания должно быть позже начала. Повторите:"
+        )
         return
     await state.update_data(time_end=message.text.strip())
     await state.set_state(CreateNight.slots)
@@ -97,8 +112,7 @@ async def enter_time_end(message: Message, state: FSMContext) -> None:
 
 
 @router.message(CreateNight.slots)
-async def enter_slots(message: Message, state: FSMContext,
-                      user: dict | None = None) -> None:
+async def enter_slots(message: Message, state: FSMContext) -> None:
     if not message.text.strip().isdigit() or int(message.text.strip()) <= 0:
         await message.answer("Введите положительное число:")
         return
@@ -108,7 +122,7 @@ async def enter_slots(message: Message, state: FSMContext,
     data = await state.get_data()
     game = await get_game(data["game_id"])
 
-    # Создаём игротеку при первом сеансе, дальше добавляем сессии в неё
+    # Игротека создаётся один раз, при первой игре.
     night_id = data.get("night_id")
     if night_id is None:
         night_id = await create_game_night(
@@ -124,17 +138,19 @@ async def enter_slots(message: Message, state: FSMContext,
         slots,
     )
 
+    date_display = data.get("date_display", data["date"])
     text = (
         f"Добавлена игра «{game['title']}» "
         f"({data['time_start']}–{data['time_end']}), мест: {slots}.\n\n"
-        f"Игротека: {data['date']}, {data['location']}."
+        f"Игротека: {date_display}, {data['location']}."
     )
 
-    # Готовы добавлять ещё
     await state.set_state(CreateNight.picking_game)
     games = await list_games()
     await message.answer(text, reply_markup=games_picker(games))
 
+
+# ---------- Завершение и отмена ----------
 
 @router.callback_query(F.data == "host_add_more")
 async def host_add_more(call: CallbackQuery, state: FSMContext) -> None:
@@ -148,26 +164,28 @@ async def host_add_more(call: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.callback_query(F.data == "host_finish")
-async def host_finish(call: CallbackQuery, state: FSMContext,
-                      user: dict | None = None) -> None:
+async def host_finish(call: CallbackQuery, state: FSMContext) -> None:
+    is_host = await _is_host(call.from_user.id)
     data = await state.get_data()
     await state.clear()
-    date = data.get("date", "—")
+
+    date_display = data.get("date_display", data.get("date", "—"))
     location = data.get("location", "—")
+
     await call.message.edit_text(
-        f"✅ Игротека на {date} ({location}) создана.\n"
+        f"✅ Игротека на {date_display} ({location}) создана.\n"
         f"Игроки смогут увидеть её в разделе «Расписание».",
-        reply_markup=main_menu(_is_host(user)),
+        reply_markup=main_menu(is_host),
     )
     await call.answer()
 
 
 @router.callback_query(F.data == "host_cancel")
-async def host_cancel(call: CallbackQuery, state: FSMContext,
-                      user: dict | None = None) -> None:
+async def host_cancel(call: CallbackQuery, state: FSMContext) -> None:
+    is_host = await _is_host(call.from_user.id)
     await state.clear()
     await call.message.edit_text(
         "Создание игротеки отменено.",
-        reply_markup=main_menu(_is_host(user)),
+        reply_markup=main_menu(is_host),
     )
     await call.answer()

@@ -1,5 +1,15 @@
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from datetime import datetime
+
+from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+
+
+def _fmt_date(iso_date: str) -> str:
+    """Преобразует ГГГГ-ММ-ДД в ДД.ММ.ГГГГ. Если формат не тот — возвращает как есть."""
+    try:
+        return datetime.strptime(iso_date, "%Y-%m-%d").strftime("%d.%m.%Y")
+    except (ValueError, TypeError):
+        return iso_date or "—"
 
 
 def main_menu(is_host: bool) -> InlineKeyboardMarkup:
@@ -16,7 +26,8 @@ def nights_list(nights: list[dict]) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for n in nights:
         kb.button(
-            text=f"{n['date']} • {n['location']} ({n['sessions_count']} игр)",
+            text=f"{_fmt_date(n['date'])} • {n['location']} "
+                 f"({n['sessions_count']} игр)",
             callback_data=f"night:{n['id']}",
         )
     kb.button(text="⬅️ Назад", callback_data="back_main")
@@ -28,9 +39,10 @@ def sessions_list(night_id: int, sessions: list[dict]) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for s in sessions:
         marker = "🔒 " if s["is_subscriber_only"] else ""
+        taken = s["max_slots"] - s["free_slots"]
         kb.button(
             text=f"{marker}{s['time_start']} — {s['title']} "
-                 f"({s['free_slots']}/{s['max_slots']})",
+                 f"({taken}/{s['max_slots']})",
             callback_data=f"session:{s['id']}",
         )
     kb.button(text="⬅️ К расписанию", callback_data="schedule")
@@ -51,7 +63,7 @@ def my_games_list(regs: list[dict]) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for r in regs:
         kb.button(
-            text=f"❌ {r['date']} {r['time_start']} — {r['title']}",
+            text=f"❌ {_fmt_date(r['date'])} {r['time_start']} — {r['title']}",
             callback_data=f"cancel:{r['reg_id']}",
         )
     kb.button(text="⬅️ Назад", callback_data="back_main")
@@ -59,7 +71,8 @@ def my_games_list(regs: list[dict]) -> InlineKeyboardMarkup:
     return kb.as_markup()
 
 
-def games_picker(games: list[dict], prefix: str = "pickgame") -> InlineKeyboardMarkup:
+def games_picker(games: list[dict],
+                 prefix: str = "pickgame") -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for g in games:
         kb.button(text=g["title"], callback_data=f"{prefix}:{g['id']}")

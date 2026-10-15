@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
 
@@ -6,6 +8,7 @@ from database.queries import (
     get_night_sessions,
     get_session,
     register_for_session,
+    get_user,
 )
 from keyboards.menus import (
     nights_list,
@@ -17,13 +20,27 @@ from keyboards.menus import (
 router = Router()
 
 
+def _fmt_date(iso_date: str) -> str:
+    """ГГГГ-ММ-ДД → ДД.ММ.ГГГГ."""
+    try:
+        return datetime.strptime(iso_date, "%Y-%m-%d").strftime("%d.%m.%Y")
+    except (ValueError, TypeError):
+        return iso_date or "—"
+
+
+async def _is_host(user_id: int) -> bool:
+    user = await get_user(user_id)
+    return bool(user and user["subscriber_level"] == "host")
+
+
 @router.callback_query(F.data == "schedule")
-async def show_schedule(call: CallbackQuery, user: dict | None = None) -> None:
+async def show_schedule(call: CallbackQuery) -> None:
     nights = await list_upcoming_nights()
+    is_host = await _is_host(call.from_user.id)
     if not nights:
         await call.message.edit_text(
             "Пока нет запланированных игротек.",
-            reply_markup=main_menu(bool(user and user["subscriber_level"] == "host")),
+            reply_markup=main_menu(is_host),
         )
         await call.answer()
         return
@@ -47,9 +64,10 @@ async def show_night(call: CallbackQuery) -> None:
         return
     text_lines = ["Игры игротеки:\n"]
     for s in sessions:
+        taken = s["max_slots"] - s["free_slots"]
         text_lines.append(
             f"• {s['time_start']}–{s['time_end'] or '?'} "
-            f"{s['title']} ({s['free_slots']}/{s['max_slots']} мест)"
+            f"{s['title']} ({taken}/{s['max_slots']} занято)"
         )
     await call.message.edit_text(
         "\n".join(text_lines),
@@ -59,28 +77,30 @@ async def show_night(call: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data.startswith("session:"))
-async def show_session(call: CallbackQuery, user: dict | None = None) -> None:
+async def show_session(call: CallbackQuery) -> None:
     session_id = int(call.data.split(":")[1])
     s = await get_session(session_id)
     if not s:
         await call.answer("Сессия не найдена", show_alert=True)
         return
 
+    user = await get_user(call.from_user.id)
     level = user["subscriber_level"] if user else "guest"
     can_register = (
         s["free_slots"] > 0
         and (not s["is_subscriber_only"] or level in ("provodnik", "host"))
     )
 
+    taken = s["max_slots"] - s["free_slots"]
     text = (
         f"🎲 <b>{s['title']}</b>\n"
-        f"Дата: {s['date']}\n"
+        f"Дата: {_fmt_date(s['date'])}\n"
         f"Время: {s['time_start']}–{s['time_end'] or '?'}\n"
         f"Место: {s['location']}\n"
-        f"Свободных мест: {s['free_slots']} из {s['max_slots']}\n"
+        f"Занято мест: {taken} из {s['max_slots']}\n"
     )
     if s["is_subscriber_only"]:
-        text += "\n🔒 Только для подписчиков «Проводник». "
+        text += "\n🔒 Только для подписчиков «Проводник»."
 
     await call.message.edit_text(
         text, parse_mode="HTML",
@@ -95,15 +115,15 @@ async def do_register(call: CallbackQuery) -> None:
     ok, msg = await register_for_session(session_id, call.from_user.id)
     await call.answer(msg, show_alert=True)
     if ok:
-        # Обновляем карточку с новыми данными
         s = await get_session(session_id)
         if s:
+            taken = s["max_slots"] - s["free_slots"]
             text = (
                 f"🎲 <b>{s['title']}</b>\n"
-                f"Дата: {s['date']}\n"
+                f"Дата: {_fmt_date(s['date'])}\n"
                 f"Время: {s['time_start']}–{s['time_end'] or '?'}\n"
                 f"Место: {s['location']}\n"
-                f"Свободных мест: {s['free_slots']} из {s['max_slots']}\n"
+                f"Занято мест: {taken} из {s['max_slots']}\n"
                 f"\n✅ Вы записаны!"
             )
             await call.message.edit_text(
