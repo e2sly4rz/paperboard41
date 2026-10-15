@@ -20,10 +20,12 @@ CREATE TABLE IF NOT EXISTS games (
     min_players        INTEGER,
     max_players        INTEGER,
     owner              TEXT,
+    owner_user_id      INTEGER,
     duration_min       INTEGER,
     duration_max       INTEGER,
     is_subscriber_only INTEGER DEFAULT 0,
-    created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (owner_user_id) REFERENCES users(telegram_id)
 );
 
 CREATE TABLE IF NOT EXISTS game_nights (
@@ -61,26 +63,46 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_session_user
 
 CREATE INDEX IF NOT EXISTS idx_sessions_night
     ON game_sessions(game_night_id);
+
+CREATE INDEX IF NOT EXISTS idx_games_owner
+    ON games(owner_user_id);
 """
 
 
-async def _migrate_add_is_approved(db: aiosqlite.Connection) -> None:
-    """Добавляет колонку is_approved, если её нет.
-
-    Нужно, потому что CREATE TABLE IF NOT EXISTS не меняет структуру
-    существующей таблицы. Для старых БД поле добавляется через ALTER.
-    """
-    cur = await db.execute("PRAGMA table_info(users)")
+async def _column_exists(db: aiosqlite.Connection, table: str, column: str) -> bool:
+    cur = await db.execute(f"PRAGMA table_info({table})")
     columns = [row[1] for row in await cur.fetchall()]
-    if "is_approved" not in columns:
+    return column in columns
+
+
+async def _run_migrations(db: aiosqlite.Connection) -> None:
+    """Идемпотентные миграции для существующих БД.
+
+    Добавляют недостающие колонки в уже созданные таблицы.
+    CREATE TABLE IF NOT EXISTS их не добавит.
+    """
+    # users.is_approved
+    if not await _column_exists(db, "users", "is_approved"):
         await db.execute(
             "ALTER TABLE users ADD COLUMN is_approved INTEGER DEFAULT 0"
         )
-        await db.commit()
+
+    # games.owner_user_id
+    if not await _column_exists(db, "games", "owner_user_id"):
+        await db.execute(
+            "ALTER TABLE games ADD COLUMN owner_user_id INTEGER"
+        )
+
+    # Индекс на владельца — тоже создаём идемпотентно
+    await db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_games_owner ON games(owner_user_id)"
+    )
+
+    await db.commit()
 
 
 async def init_db() -> None:
     async with aiosqlite.connect(DB_PATH) as db:
         await db.executescript(SCHEMA)
         await db.commit()
-        await _migrate_add_is_approved(db)
+        await _run_migrations(db)

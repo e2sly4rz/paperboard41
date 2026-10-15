@@ -400,3 +400,115 @@ async def get_all_night_registrations(night_id: int) -> list[dict]:
             (night_id,),
         )
         return [dict(r) for r in await cur.fetchall()]
+
+# ---------- Владельцы игр ----------
+
+async def set_game_owner(game_id: int, owner_user_id: int | None) -> None:
+    """Назначает владельца игры.
+
+    owner_user_id = None → игра принадлежит клубу (owner = 'Клуб').
+    owner_user_id = <id> → владелец-хост, поле owner синхронизируется именем.
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        if owner_user_id is None:
+            await db.execute(
+                "UPDATE games SET owner_user_id = NULL, owner = 'Клуб' WHERE id = ?",
+                (game_id,),
+            )
+        else:
+            db.row_factory = aiosqlite.Row
+            cur = await db.execute(
+                """SELECT first_name, last_name, username
+                   FROM users WHERE telegram_id = ?""",
+                (owner_user_id,),
+            )
+            row = await cur.fetchone()
+            if row:
+                name_parts = [row["first_name"] or "", row["last_name"] or ""]
+                name = " ".join(p for p in name_parts if p).strip()
+                if not name:
+                    name = row["username"] or "Хост"
+            else:
+                name = "Хост"
+
+            await db.execute(
+                "UPDATE games SET owner_user_id = ?, owner = ? WHERE id = ?",
+                (owner_user_id, name, game_id),
+            )
+        await db.commit()
+
+
+async def get_game_owner(game_id: int) -> dict | None:
+    """Возвращает информацию о владельце игры.
+
+    Для игры клуба — {'is_club': True, 'display': 'Клуб'}.
+    Для игры хоста — поля с именем и username.
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            """SELECT g.owner_user_id,
+                      g.owner AS owner_text,
+                      u.username, u.first_name, u.last_name
+               FROM games g
+               LEFT JOIN users u ON u.telegram_id = g.owner_user_id
+               WHERE g.id = ?""",
+            (game_id,),
+        )
+        row = await cur.fetchone()
+        if not row:
+            return None
+
+        if row["owner_user_id"] is None:
+            return {
+                "is_club": True,
+                "owner_user_id": None,
+                "display": row["owner_text"] or "Клуб",
+            }
+
+        name_parts = [row["first_name"] or "", row["last_name"] or ""]
+        name = " ".join(p for p in name_parts if p).strip() or "Хост"
+        return {
+            "is_club": False,
+            "owner_user_id": row["owner_user_id"],
+            "username": row["username"],
+            "first_name": row["first_name"],
+            "last_name": row["last_name"],
+            "display": name,
+        }
+
+
+async def list_hosts() -> list[dict]:
+    """Пользователи с уровнем host — кандидаты в владельцы игр."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            """SELECT telegram_id, username, first_name, last_name
+               FROM users
+               WHERE subscriber_level = 'host'
+               ORDER BY first_name, username"""
+        )
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def list_games_by_owner(owner_user_id: int | None) -> list[dict]:
+    """Список игр конкретного владельца.
+
+    owner_user_id = None → игры клуба.
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        if owner_user_id is None:
+            cur = await db.execute(
+                """SELECT * FROM games
+                   WHERE owner_user_id IS NULL
+                   ORDER BY title"""
+            )
+        else:
+            cur = await db.execute(
+                """SELECT * FROM games
+                   WHERE owner_user_id = ?
+                   ORDER BY title""",
+                (owner_user_id,),
+            )
+        return [dict(r) for r in await cur.fetchall()]
