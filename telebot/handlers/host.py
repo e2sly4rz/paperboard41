@@ -28,12 +28,10 @@ from keyboards.menus import (
     host_menu,
     host_nights_list,
     host_night_card,
-    host_night_card_empty,
     host_sessions_list,
     confirm_delete_night,
     confirm_delete_session,
     cancel_edit,
-    night_participants_back,
     games_picker_for_night,
 )
 from states.states import CreateNight, EditNight, AddSessionToNight
@@ -256,29 +254,8 @@ async def night_card(call: CallbackQuery) -> None:
         await call.answer("Это не ваша игротека", show_alert=True)
         return
 
-    text = (
-        f"🎲 Игротека\n"
-        f"Дата: {_fmt_date(night['date'])}\n"
-        f"Место: {night['location']}\n"
-        f"Игр: {night['sessions_count']}\n"
-        f"Записей: {night['total_taken']}"
-    )
-    await call.message.edit_text(text, reply_markup=host_night_card(night_id))
-    await call.answer()
-
-
-# ============ СВОДНЫЙ СПИСОК УЧАСТНИКОВ ============
-
-@router.callback_query(F.data.startswith("hn_part:"))
-async def night_participants(call: CallbackQuery) -> None:
-    night_id = int(call.data.split(":")[1])
-    night = await get_night(night_id)
-    if not night or night["host_telegram_id"] != call.from_user.id:
-        await call.answer("Нет доступа", show_alert=True)
-        return
-
+    # Собираем участников
     rows = await get_all_night_registrations(night_id)
-
     sessions: dict[int, dict] = {}
     for r in rows:
         sid = r["session_id"]
@@ -298,40 +275,44 @@ async def night_participants(call: CallbackQuery) -> None:
                 "username": r["username"],
             })
 
-    header = (
-        f"👥 <b>Участники игротеки</b>\n"
-        f"📅 {_fmt_date(night['date'])}\n"
-        f"📍 {night['location']}\n"
-        f"Всего записей: {night['total_taken']}\n"
-    )
+    # Шапка карточки
+    lines = [
+        "🎲 <b>Игротека</b>",
+        f"📅 {_fmt_date(night['date'])}",
+        f"📍 {night['location']}",
+        f"Игр: {night['sessions_count']} • Записей: {night['total_taken']}",
+    ]
 
+    # Блок участников
     if not sessions:
-        body = "\n\nВ этой игротеке пока нет игр."
+        lines.append("\n<i>В этой игротеке пока нет игр.</i>")
     else:
-        blocks = []
+        lines.append("\n👥 <b>Участники:</b>")
         for s in sessions.values():
             time_range = f"{s['time_start']}–{s['time_end'] or '?'}"
-            block_header = (
+            lines.append(
                 f"\n🎲 <b>{s['game_title']}</b>\n"
-                f"⏰ {time_range} • "
-                f"занято {s['slots_taken']} из {s['max_slots']}"
+                f"⏰ {time_range} • занято {s['slots_taken']} из {s['max_slots']}"
             )
             if not s["players"]:
-                blocks.append(block_header + "\n— никто не записан")
+                lines.append("— никто не записан")
             else:
-                lines = []
                 for i, p in enumerate(s["players"], 1):
                     name_parts = [p["first_name"] or "", p["last_name"] or ""]
                     name = " ".join(x for x in name_parts if x).strip() or "Без имени"
                     username = f" (@{p['username']})" if p["username"] else ""
                     lines.append(f"{i}. {name}{username}")
-                blocks.append(block_header + "\n" + "\n".join(lines))
-        body = "\n".join(blocks)
+
+    text = "\n".join(lines)
+
+    # Telegram ограничивает сообщение 4096 символами
+    if len(text) > 4000:
+        text = text[:3990] + "\n\n<i>…список обрезан</i>"
 
     await call.message.edit_text(
-        header + body,
+        text,
         parse_mode="HTML",
-        reply_markup=night_participants_back(night_id),
+        reply_markup=host_night_card(night_id),
     )
     await call.answer()
 
@@ -441,7 +422,7 @@ async def sessions_manage(call: CallbackQuery) -> None:
             f"Игр: 0\n"
             f"Записей: 0\n\n"
             f"В игротеке пока нет игр. Добавьте первую.",
-            reply_markup=host_night_card_empty(night_id),
+            reply_markup=host_night_card(night_id),
         )
         await call.answer()
         return

@@ -117,7 +117,6 @@ def host_nights_list(nights: list[dict]) -> InlineKeyboardMarkup:
 
 def host_night_card(night_id: int) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    kb.button(text="👥 Все участники", callback_data=f"hn_part:{night_id}")
     kb.button(text="➕ Добавить игру", callback_data=f"hn_add:{night_id}")
     kb.button(text="📅 Изменить дату", callback_data=f"hn_date:{night_id}")
     kb.button(text="📍 Изменить место", callback_data=f"hn_loc:{night_id}")
@@ -182,23 +181,5 @@ def confirm_delete_session(session_id: int, night_id: int) -> InlineKeyboardMark
 def cancel_edit(night_id: int) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.button(text="❌ Отмена", callback_data=f"hn:{night_id}")
-    kb.adjust(1)
-    return kb.as_markup()
-
-
-def night_participants_back(night_id: int) -> InlineKeyboardMarkup:
-    kb = InlineKeyboardBuilder()
-    kb.button(text="⬅️ К игротеке", callback_data=f"hn:{night_id}")
-    kb.adjust(1)
-    return kb.as_markup()
-
-def host_night_card_empty(night_id: int) -> InlineKeyboardMarkup:
-    """Карточка игротеки без игр — сразу предлагает добавить первую."""
-    kb = InlineKeyboardBuilder()
-    kb.button(text="➕ Добавить игру", callback_data=f"hn_add:{night_id}")
-    kb.button(text="📅 Изменить дату", callback_data=f"hn_date:{night_id}")
-    kb.button(text="📍 Изменить место", callback_data=f"hn_loc:{night_id}")
-    kb.button(text="🗑 Удалить игротеку", callback_data=f"hn_del:{night_id}")
-    kb.button(text="⬅️ К списку", callback_data="host_manage_list")
     kb.adjust(1)
     return kb.as_markup()
