@@ -28,13 +28,15 @@ from keyboards.menus import (
     host_menu,
     host_nights_list,
     host_night_card,
+    host_night_card_empty,
     host_sessions_list,
     confirm_delete_night,
     confirm_delete_session,
     cancel_edit,
     night_participants_back,
+    games_picker_for_night,
 )
-from states.states import CreateNight, EditNight
+from states.states import CreateNight, EditNight, AddSessionToNight
 
 router = Router()
 
@@ -428,16 +430,25 @@ async def sessions_manage(call: CallbackQuery) -> None:
     if not night or night["host_telegram_id"] != call.from_user.id:
         await call.answer("Нет доступа", show_alert=True)
         return
+
     sessions = await get_night_sessions_for_edit(night_id)
+
     if not sessions:
         await call.message.edit_text(
-            "В этой игротеке нет игр.",
-            reply_markup=host_night_card(night_id),
+            f"🎲 Игротека\n"
+            f"Дата: {_fmt_date(night['date'])}\n"
+            f"Место: {night['location']}\n"
+            f"Игр: 0\n"
+            f"Записей: 0\n\n"
+            f"В игротеке пока нет игр. Добавьте первую.",
+            reply_markup=host_night_card_empty(night_id),
         )
         await call.answer()
         return
+
     await call.message.edit_text(
-        "Нажмите на игру, чтобы удалить её из игротеки:",
+        "Нажмите 🗑 на игре, чтобы удалить её из игротеки, "
+        "или ➕, чтобы добавить новую:",
         reply_markup=host_sessions_list(night_id, sessions),
     )
     await call.answer()
@@ -566,3 +577,100 @@ async def night_delete_confirm_yes(call: CallbackQuery) -> None:
             reply_markup=host_nights_list(nights),
         )
     await call.answer("Игротека удалена")
+
+# ============ ДОБАВЛЕНИЕ ИГРЫ В СУЩЕСТВУЮЩУЮ ИГРОТЕКУ ============
+
+@router.callback_query(F.data.startswith("hn_add:"))
+async def add_game_start(call: CallbackQuery, state: FSMContext) -> None:
+    night_id = int(call.data.split(":")[1])
+    night = await get_night(night_id)
+    if not night or night["host_telegram_id"] != call.from_user.id:
+        await call.answer("Нет доступа", show_alert=True)
+        return
+
+    await state.clear()
+    await state.set_state(AddSessionToNight.picking_game)
+    await state.update_data(night_id=night_id)
+
+    games = await list_games()
+    if not games:
+        await call.message.edit_text(
+            "Каталог игр пуст. Добавьте игры через администратора.",
+            reply_markup=host_night_card(night_id),
+        )
+        await call.answer()
+        return
+
+    await call.message.edit_text(
+        "Выберите игру для добавления:",
+        reply_markup=games_picker_for_night(night_id, games),
+    )
+    await call.answer()
+
+
+@router.callback_query(AddSessionToNight.picking_game, F.data.startswith("addgame:"))
+async def add_game_pick(call: CallbackQuery, state: FSMContext) -> None:
+    game_id = int(call.data.split(":")[1])
+    await state.update_data(game_id=game_id)
+    await state.set_state(AddSessionToNight.time_start)
+    await call.message.edit_text(
+        "Введите время начала в формате ЧЧ:ММ (например, 18:30):"
+    )
+    await call.answer()
+
+
+@router.message(AddSessionToNight.time_start)
+async def add_game_time_start(message: Message, state: FSMContext) -> None:
+    try:
+        datetime.strptime(message.text.strip(), "%H:%M")
+    except ValueError:
+        await message.answer("Неверный формат. Введите время как ЧЧ:ММ:")
+        return
+    await state.update_data(time_start=message.text.strip())
+    await state.set_state(AddSessionToNight.time_end)
+    await message.answer("Введите время окончания в формате ЧЧ:ММ:")
+
+
+@router.message(AddSessionToNight.time_end)
+async def add_game_time_end(message: Message, state: FSMContext) -> None:
+    try:
+        datetime.strptime(message.text.strip(), "%H:%M")
+    except ValueError:
+        await message.answer("Неверный формат. Введите время как ЧЧ:ММ:")
+        return
+    data = await state.get_data()
+    if message.text.strip() <= data["time_start"]:
+        await message.answer("Время окончания должно быть позже начала. Повторите:")
+        return
+    await state.update_data(time_end=message.text.strip())
+    await state.set_state(AddSessionToNight.slots)
+    await message.answer("Сколько свободных мест на эту игру?")
+
+
+@router.message(AddSessionToNight.slots)
+async def add_game_slots(message: Message, state: FSMContext) -> None:
+    if not message.text.strip().isdigit() or int(message.text.strip()) <= 0:
+        await message.answer("Введите положительное число:")
+        return
+    slots = int(message.text.strip())
+
+    data = await state.get_data()
+    night_id = data["night_id"]
+    game_id = data["game_id"]
+    time_start = data["time_start"]
+    time_end = data["time_end"]
+
+    await add_session(night_id, game_id, time_start, time_end, slots)
+    await state.clear()
+
+    game = await get_game(game_id)
+    night = await get_night(night_id)
+
+    # Показываем обновлённый экран управления играми
+    sessions = await get_night_sessions_for_edit(night_id)
+    text = (
+        f"✅ Игра «{game['title']}» добавлена в игротеку.\n"
+        f"📅 {_fmt_date(night['date'])} • {night['location']}\n\n"
+        f"Нажмите на игру, чтобы удалить её из игротеки:"
+    )
+    await message.answer(text, reply_markup=host_sessions_list(night_id, sessions))

@@ -13,3 +13,11 @@ class CreateNight(StatesGroup):
 class EditNight(StatesGroup):
     new_date = State()
     new_location = State()
+
+
+class AddSessionToNight(StatesGroup):
+    """Добавление игры в уже существующую игротеку."""
+    picking_game = State()
+    time_start = State()
+    time_end = State()
+    slots = State()
