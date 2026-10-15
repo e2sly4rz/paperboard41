@@ -228,3 +228,127 @@ async def cancel_registration(reg_id: int, user_id: int) -> bool:
         )
         await db.commit()
         return True
+
+# ---------- Управление игротеками (для хостов) ----------
+
+async def list_host_nights(host_telegram_id: int) -> list[dict]:
+    """Возвращает будущие игротеки конкретного хоста."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            """SELECT gn.id, gn.date, gn.location,
+                      COUNT(gs.id) AS sessions_count,
+                      COALESCE(SUM(gs.slots_taken), 0) AS total_taken
+               FROM game_nights gn
+               LEFT JOIN game_sessions gs ON gs.game_night_id = gn.id
+               WHERE gn.host_telegram_id = ?
+                 AND gn.date >= date('now')
+               GROUP BY gn.id
+               ORDER BY gn.date""",
+            (host_telegram_id,),
+        )
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def get_night(night_id: int) -> dict | None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            """SELECT gn.id, gn.date, gn.location, gn.host_telegram_id,
+                      COUNT(gs.id) AS sessions_count,
+                      COALESCE(SUM(gs.slots_taken), 0) AS total_taken
+               FROM game_nights gn
+               LEFT JOIN game_sessions gs ON gs.game_night_id = gn.id
+               WHERE gn.id = ?
+               GROUP BY gn.id""",
+            (night_id,),
+        )
+        row = await cur.fetchone()
+        return dict(row) if row else None
+
+
+async def get_night_sessions_for_edit(night_id: int) -> list[dict]:
+    """Список сессий с числом записавшихся — для экрана редактирования."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            """SELECT gs.id, gs.time_start, gs.time_end,
+                      gs.max_slots, gs.slots_taken,
+                      g.title AS game_title
+               FROM game_sessions gs
+               JOIN games g ON g.id = gs.game_id
+               WHERE gs.game_night_id = ?
+               ORDER BY gs.time_start""",
+            (night_id,),
+        )
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def update_night_date(night_id: int, new_date: str) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE game_nights SET date = ? WHERE id = ?",
+            (new_date, night_id),
+        )
+        await db.commit()
+
+
+async def update_night_location(night_id: int, new_location: str) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE game_nights SET location = ? WHERE id = ?",
+            (new_location, night_id),
+        )
+        await db.commit()
+
+
+async def delete_night(night_id: int) -> None:
+    """Удаляет игротеку вместе со всеми сессиями и записями.
+
+    ON DELETE CASCADE в схеме уже прописан для game_sessions и registrations,
+    поэтому достаточно удалить game_night. Но включим foreign_keys принудительно,
+    чтобы каскад гарантированно сработал.
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("PRAGMA foreign_keys = ON")
+        await db.execute("DELETE FROM game_nights WHERE id = ?", (night_id,))
+        await db.commit()
+
+
+async def delete_session(session_id: int) -> None:
+    """Удаляет сессию вместе с записями на неё."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("PRAGMA foreign_keys = ON")
+        await db.execute("DELETE FROM game_sessions WHERE id = ?", (session_id,))
+        await db.commit()
+
+
+async def count_registrations_for_night(night_id: int) -> int:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            """SELECT COUNT(*) FROM registrations r
+               JOIN game_sessions gs ON gs.id = r.session_id
+               WHERE gs.game_night_id = ?""",
+            (night_id,),
+        )
+        (count,) = await cur.fetchone()
+        return count
+
+
+async def list_registrations_for_night(night_id: int) -> list[dict]:
+    """Список записавшихся — чтобы предупредить хоста перед удалением."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            """SELECT u.telegram_id, u.username, u.first_name,
+                      g.title AS game_title,
+                      gs.time_start
+               FROM registrations r
+               JOIN game_sessions gs ON gs.id = r.session_id
+               JOIN games        g  ON g.id  = gs.game_id
+               JOIN users        u  ON u.telegram_id = r.user_telegram_id
+               WHERE gs.game_night_id = ?
+               ORDER BY gs.time_start""",
+            (night_id,),
+        )
+        return [dict(r) for r in await cur.fetchall()]

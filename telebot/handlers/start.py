@@ -14,7 +14,7 @@ async def cmd_start(message: Message) -> None:
     u = message.from_user
     await ensure_user(u.id, u.username, u.first_name, u.last_name)
     user = await get_user(u.id)
-    is_host = user["subscriber_level"] == "host"
+    is_host = bool(user and user["subscriber_level"] == "host")
     await message.answer(
         f"Привет, {u.first_name}!\n\n"
         "Это бот клуба настольных игр. Здесь можно посмотреть расписание "
@@ -24,7 +24,8 @@ async def cmd_start(message: Message) -> None:
 
 
 @router.callback_query(F.data == "back_main")
-async def back_main(call: CallbackQuery, user: dict | None = None) -> None:
+async def back_main(call: CallbackQuery) -> None:
+    user = await get_user(call.from_user.id)
     is_host = bool(user and user["subscriber_level"] == "host")
     await call.message.edit_text(
         "Главное меню:",

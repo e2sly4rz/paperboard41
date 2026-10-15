@@ -17,7 +17,7 @@ def main_menu(is_host: bool) -> InlineKeyboardMarkup:
     kb.button(text="📅 Расписание", callback_data="schedule")
     kb.button(text="🎲 Мои записи", callback_data="my_games")
     if is_host:
-        kb.button(text="➕ Создать игротеку", callback_data="host_create")
+        kb.button(text="🎩 Меню организатора", callback_data="host_menu")
     kb.adjust(1)
     return kb.as_markup()
 
@@ -87,5 +87,74 @@ def confirm_session() -> InlineKeyboardMarkup:
     kb.button(text="➕ Добавить ещё игру", callback_data="host_add_more")
     kb.button(text="✅ Завершить создание", callback_data="host_finish")
     kb.button(text="❌ Отмена", callback_data="host_cancel")
+    kb.adjust(1)
+    return kb.as_markup()
+
+def host_menu() -> InlineKeyboardMarkup:
+    """Меню хоста: создать новую или управлять существующими."""
+    kb = InlineKeyboardBuilder()
+    kb.button(text="➕ Создать игротеку", callback_data="host_create")
+    kb.button(text="✏️ Мои игротеки", callback_data="host_manage_list")
+    kb.button(text="⬅️ Назад", callback_data="back_main")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def host_nights_list(nights: list[dict]) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    for n in nights:
+        kb.button(
+            text=f"{_fmt_date(n['date'])} • {n['location']} "
+                 f"({n['sessions_count']} игр, {n['total_taken']} записей)",
+            callback_data=f"hn:{n['id']}",
+        )
+    kb.button(text="⬅️ Назад", callback_data="host_menu")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def host_night_card(night_id: int) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(text="📅 Изменить дату", callback_data=f"hn_date:{night_id}")
+    kb.button(text="📍 Изменить место", callback_data=f"hn_loc:{night_id}")
+    kb.button(text="🎲 Управление играми", callback_data=f"hn_sessions:{night_id}")
+    kb.button(text="🗑 Удалить игротеку", callback_data=f"hn_del:{night_id}")
+    kb.button(text="⬅️ К списку", callback_data="host_manage_list")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def host_sessions_list(night_id: int, sessions: list[dict]) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    for s in sessions:
+        kb.button(
+            text=f"🗑 {s['time_start']} — {s['game_title']} "
+                 f"({s['slots_taken']}/{s['max_slots']})",
+            callback_data=f"hs_del:{s['id']}",
+        )
+    kb.button(text="⬅️ К игротеке", callback_data=f"hn:{night_id}")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def confirm_delete_night(night_id: int) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(text="🗑 Да, удалить", callback_data=f"hn_del_yes:{night_id}")
+    kb.button(text="⬅️ Отмена", callback_data=f"hn:{night_id}")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def confirm_delete_session(session_id: int, night_id: int) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(text="🗑 Да, удалить", callback_data=f"hs_del_yes:{session_id}")
+    kb.button(text="⬅️ Отмена", callback_data=f"hn_sessions:{night_id}")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def cancel_edit(night_id: int) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(text="❌ Отмена", callback_data=f"hn:{night_id}")
     kb.adjust(1)
     return kb.as_markup()
