@@ -16,6 +16,7 @@ from keyboards.menus import (
     session_card,
     main_menu,
 )
+from utils import is_admin
 
 router = Router()
 
@@ -27,25 +28,9 @@ def _fmt_date(iso_date: str) -> str:
         return iso_date or "—"
 
 
-def _session_status(s: dict) -> str:
-    """Эмодзи-маркер по заполненности сессии.
-
-    🔴 — всё занято
-    🟠 — осталось ровно одно место
-    🟡 — осталось два места
-    🟢 — есть места
-    """
-    free = s["free_slots"]
-    if free <= 0:
-        return "🔴"
-    if free == 1:
-        return "🟠"
-    if free == 2:
-        return "🟡"
-    return "🟢"
-
-
-async def _is_host(user_id: int) -> bool:
+async def _is_host_or_admin(user_id: int) -> bool:
+    if is_admin(user_id):
+        return True
     user = await get_user(user_id)
     return bool(user and user["subscriber_level"] == "host")
 
@@ -53,8 +38,7 @@ async def _is_host(user_id: int) -> bool:
 @router.callback_query(F.data == "schedule")
 async def show_schedule(call: CallbackQuery) -> None:
     nights = await list_upcoming_nights()
-    user = await get_user(call.from_user.id)
-    is_host = bool(user and user["subscriber_level"] == "host")
+    is_host = await _is_host_or_admin(call.from_user.id)
     if not nights:
         await call.message.edit_text(
             "Пока нет запланированных игротек.",
@@ -73,7 +57,6 @@ async def show_schedule(call: CallbackQuery) -> None:
 async def show_night(call: CallbackQuery) -> None:
     night_id = int(call.data.split(":")[1])
     sessions = await get_night_sessions(night_id)
-
     if not sessions:
         await call.message.edit_text(
             "В этой игротеке пока нет игр.",
@@ -81,21 +64,15 @@ async def show_night(call: CallbackQuery) -> None:
         )
         await call.answer()
         return
-
-    blocks = ["🎲 <b>Игры на игротеке:</b>"]
+    text_lines = ["Игры игротеки:\n"]
     for s in sessions:
         taken = s["max_slots"] - s["free_slots"]
-        marker = _session_status(s)
-        lock = " 🔒" if s["is_subscriber_only"] else ""
-        blocks.append(
-            f"{marker} <b>{s['time_start']}–{s['time_end'] or '?'}</b>\n"
-            f"{s['title']}{lock}\n"
-            f"занято {taken} из {s['max_slots']}"
+        text_lines.append(
+            f"• {s['time_start']}–{s['time_end'] or '?'} "
+            f"{s['title']} ({taken}/{s['max_slots']} занято)"
         )
-
     await call.message.edit_text(
-        "\n\n".join(blocks),
-        parse_mode="HTML",
+        "\n".join(text_lines),
         reply_markup=sessions_list(night_id, sessions),
     )
     await call.answer()

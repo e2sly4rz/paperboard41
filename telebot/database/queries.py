@@ -19,41 +19,6 @@ async def ensure_user(telegram_id: int, username: str | None,
         await db.commit()
 
 
-async def approve_user(telegram_id: int) -> bool:
-    """Одобряет доступ. Возвращает True, если пользователь был найден."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        cur = await db.execute(
-            "UPDATE users SET is_approved = 1 WHERE telegram_id = ?",
-            (telegram_id,),
-        )
-        await db.commit()
-        return cur.rowcount > 0
-
-
-async def revoke_user(telegram_id: int) -> bool:
-    """Отзывает доступ. Возвращает True, если пользователь был найден."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        cur = await db.execute(
-            "UPDATE users SET is_approved = 0 WHERE telegram_id = ?",
-            (telegram_id,),
-        )
-        await db.commit()
-        return cur.rowcount > 0
-
-
-async def list_pending_users() -> list[dict]:
-    """Список пользователей, ожидающих одобрения."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute(
-            """SELECT telegram_id, username, first_name, last_name, created_at
-               FROM users
-               WHERE is_approved = 0
-               ORDER BY created_at"""
-        )
-        return [dict(r) for r in await cur.fetchall()]
-
-
 async def get_user(telegram_id: int) -> dict | None:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
@@ -73,21 +38,116 @@ async def set_user_level(telegram_id: int, level: str) -> None:
         await db.commit()
 
 
+async def approve_user(telegram_id: int) -> bool:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "UPDATE users SET is_approved = 1 WHERE telegram_id = ?",
+            (telegram_id,),
+        )
+        await db.commit()
+        return cur.rowcount > 0
+
+
+async def revoke_user(telegram_id: int) -> bool:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "UPDATE users SET is_approved = 0 WHERE telegram_id = ?",
+            (telegram_id,),
+        )
+        await db.commit()
+        return cur.rowcount > 0
+
+
+async def list_pending_users() -> list[dict]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            """SELECT telegram_id, username, first_name, last_name, created_at
+               FROM users
+               WHERE is_approved = 0
+               ORDER BY created_at"""
+        )
+        return [dict(r) for r in await cur.fetchall()]
+
+
 # ---------- Каталог игр ----------
 
 async def list_games() -> list[dict]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
-        cur = await db.execute("SELECT * FROM games ORDER BY title")
+        cur = await db.execute(
+            """SELECT g.*,
+                      u.username    AS owner_username,
+                      u.first_name  AS owner_first_name,
+                      u.last_name   AS owner_last_name
+               FROM games g
+               LEFT JOIN users u ON u.telegram_id = g.owner_user_id
+               ORDER BY g.title"""
+        )
         return [dict(r) for r in await cur.fetchall()]
 
 
 async def get_game(game_id: int) -> dict | None:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
-        cur = await db.execute("SELECT * FROM games WHERE id = ?", (game_id,))
+        cur = await db.execute(
+            """SELECT g.*,
+                      u.username    AS owner_username,
+                      u.first_name  AS owner_first_name,
+                      u.last_name   AS owner_last_name
+               FROM games g
+               LEFT JOIN users u ON u.telegram_id = g.owner_user_id
+               WHERE g.id = ?""",
+            (game_id,),
+        )
         row = await cur.fetchone()
         return dict(row) if row else None
+
+
+async def search_games(query: str, limit: int = 10) -> list[dict]:
+    """Гибкий поиск без изменений схемы БД.
+
+    Регистронезависимый (включая кириллицу), многословный в любом порядке,
+    с ранжированием: точное совпадение → начало названия → слово целиком → в середине.
+    """
+    q = query.strip().lower()
+    if not q:
+        return []
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            """SELECT g.*,
+                      u.username    AS owner_username,
+                      u.first_name  AS owner_first_name,
+                      u.last_name   AS owner_last_name
+               FROM games g
+               LEFT JOIN users u ON u.telegram_id = g.owner_user_id
+               ORDER BY g.title"""
+        )
+        games = [dict(r) for r in await cur.fetchall()]
+
+    words = [w for w in q.split() if w]
+
+    scored: list[tuple[int, int, dict]] = []
+    for g in games:
+        title = (g["title"] or "").lower()
+        if not all(w in title for w in words):
+            continue
+
+        if title == q:
+            rank = 0
+        elif title.startswith(q):
+            rank = 1
+        elif any(w in title.split() for w in words):
+            rank = 2
+        else:
+            rank = 3
+
+        scored.append((rank, len(title), g))
+
+    scored.sort(key=lambda x: (x[0], x[1], x[2]["title"]))
+    return [g for _, _, g in scored[:limit]]
 
 
 # ---------- Игротеки и сессии ----------
@@ -123,6 +183,24 @@ async def list_upcoming_nights() -> list[dict]:
         cur = await db.execute(
             """SELECT gn.id, gn.date, gn.location,
                       COUNT(gs.id) AS sessions_count
+               FROM game_nights gn
+               LEFT JOIN game_sessions gs ON gs.game_night_id = gn.id
+               WHERE gn.date >= date('now')
+               GROUP BY gn.id
+               ORDER BY gn.date"""
+        )
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def list_all_upcoming_nights() -> list[dict]:
+    """Все будущие игротеки — для меню хоста."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            """SELECT gn.id, gn.date, gn.location,
+                      gn.host_telegram_id,
+                      COUNT(gs.id) AS sessions_count,
+                      COALESCE(SUM(gs.slots_taken), 0) AS total_taken
                FROM game_nights gn
                LEFT JOIN game_sessions gs ON gs.game_night_id = gn.id
                WHERE gn.date >= date('now')
@@ -263,7 +341,7 @@ async def cancel_registration(reg_id: int, user_id: int) -> bool:
         return True
 
 
-# ---------- Управление игротеками (для хостов) ----------
+# ---------- Управление игротеками ----------
 
 async def list_host_nights(host_telegram_id: int) -> list[dict]:
     async with aiosqlite.connect(DB_PATH) as db:
@@ -360,27 +438,7 @@ async def count_registrations_for_night(night_id: int) -> int:
         return count
 
 
-async def get_session_with_host(session_id: int) -> dict | None:
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute(
-            """SELECT gs.id, gs.max_slots, gs.slots_taken,
-                      gs.time_start, gs.time_end,
-                      g.title,
-                      gn.id AS night_id, gn.date, gn.location,
-                      gn.host_telegram_id
-               FROM game_sessions gs
-               JOIN games g       ON g.id  = gs.game_id
-               JOIN game_nights gn ON gn.id = gs.game_night_id
-               WHERE gs.id = ?""",
-            (session_id,),
-        )
-        row = await cur.fetchone()
-        return dict(row) if row else None
-
-
 async def get_all_night_registrations(night_id: int) -> list[dict]:
-    """Все записи на игротеку — плоский список, отсортированный по времени."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
@@ -398,71 +456,5 @@ async def get_all_night_registrations(night_id: int) -> list[dict]:
                WHERE gs.game_night_id = ?
                ORDER BY gs.time_start, r.registered_at""",
             (night_id,),
-        )
-        return [dict(r) for r in await cur.fetchall()]
-
-# ---------- Поиск игр ----------
-
-async def search_games(query: str, limit: int = 10) -> list[dict]:
-    """Гибкий поиск по названию без изменений схемы БД.
-
-    - регистронезависимый (работает и для кириллицы),
-    - многословный в любом порядке,
-    - ранжирование: точное совпадение → начало названия → слово целиком → в середине.
-    """
-    q = query.strip().lower()
-    if not q:
-        return []
-
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute(
-            """SELECT g.*,
-                      u.username    AS owner_username,
-                      u.first_name  AS owner_first_name,
-                      u.last_name   AS owner_last_name
-               FROM games g
-               LEFT JOIN users u ON u.telegram_id = g.owner_user_id
-               ORDER BY g.title"""
-        )
-        games = [dict(r) for r in await cur.fetchall()]
-
-    words = [w for w in q.split() if w]
-
-    scored: list[tuple[int, int, dict]] = []
-    for g in games:
-        title = (g["title"] or "").lower()
-        if not all(w in title for w in words):
-            continue
-
-        if title == q:
-            rank = 0
-        elif title.startswith(q):
-            rank = 1
-        elif any(w in title.split() for w in words):
-            rank = 2
-        else:
-            rank = 3
-
-        scored.append((rank, len(title), g))
-
-    scored.sort(key=lambda x: (x[0], x[1], x[2]["title"]))
-    return [g for _, _, g in scored[:limit]]
-
-
-async def list_recent_games(limit: int = 10) -> list[dict]:
-    """Последние добавленные игры — показываем, если поиск не дал результата."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute(
-            """SELECT g.*,
-                      u.username    AS owner_username,
-                      u.first_name  AS owner_first_name,
-                      u.last_name   AS owner_last_name
-               FROM games g
-               LEFT JOIN users u ON u.telegram_id = g.owner_user_id
-               ORDER BY g.created_at DESC, g.id DESC
-               LIMIT ?""",
-            (limit,),
         )
         return [dict(r) for r in await cur.fetchall()]

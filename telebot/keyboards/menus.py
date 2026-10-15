@@ -14,7 +14,6 @@ def _fmt_date(iso_date: str) -> str:
 
 
 def main_menu(is_host: bool, user_id: int | None = None) -> InlineKeyboardMarkup:
-    """Главное меню. Кнопка «Справка» видна только админу."""
     kb = InlineKeyboardBuilder()
     kb.button(text="📅 Расписание", callback_data="schedule")
     kb.button(text="🎲 Мои записи", callback_data="my_games")
@@ -80,33 +79,23 @@ def my_games_list(regs: list[dict]) -> InlineKeyboardMarkup:
     return kb.as_markup()
 
 
-def games_picker(games: list[dict],
-                 prefix: str = "pickgame") -> InlineKeyboardMarkup:
-    kb = InlineKeyboardBuilder()
-    for g in games:
-        kb.button(text=g["title"], callback_data=f"{prefix}:{g['id']}")
-    kb.button(text="✅ Завершить создание", callback_data="host_finish")
-    kb.button(text="❌ Отмена", callback_data="host_cancel")
-    kb.adjust(1)
-    return kb.as_markup()
-
-
-# ---------- Клавиатуры хоста ----------
-
 def host_menu() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.button(text="➕ Создать игротеку", callback_data="host_create")
-    kb.button(text="✏️ Мои игротеки", callback_data="host_manage_list")
+    kb.button(text="✏️ Все игротеки", callback_data="host_manage_list")
     kb.button(text="⬅️ Назад", callback_data="back_main")
     kb.adjust(1)
     return kb.as_markup()
 
 
-def host_nights_list(nights: list[dict]) -> InlineKeyboardMarkup:
+def host_nights_list(nights: list[dict],
+                     own_ids: set[int] | None = None) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for n in nights:
+        is_own = own_ids is None or n["id"] in own_ids
+        prefix = "🎩" if is_own else "👀"
         kb.button(
-            text=f"{_fmt_date(n['date'])} • {n['location']} "
+            text=f"{prefix} {_fmt_date(n['date'])} • {n['location']} "
                  f"(игр: {n['sessions_count']}, записей: {n['total_taken']})",
             callback_data=f"hn:{n['id']}",
         )
@@ -115,13 +104,14 @@ def host_nights_list(nights: list[dict]) -> InlineKeyboardMarkup:
     return kb.as_markup()
 
 
-def host_night_card(night_id: int) -> InlineKeyboardMarkup:
+def host_night_card(night_id: int, is_owner: bool = True) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.button(text="➕ Добавить игру", callback_data=f"hn_add:{night_id}")
-    kb.button(text="📅 Изменить дату", callback_data=f"hn_date:{night_id}")
-    kb.button(text="📍 Изменить место", callback_data=f"hn_loc:{night_id}")
-    kb.button(text="🎲 Управление играми", callback_data=f"hn_sessions:{night_id}")
-    kb.button(text="🗑 Удалить игротеку", callback_data=f"hn_del:{night_id}")
+    if is_owner:
+        kb.button(text="📅 Изменить дату", callback_data=f"hn_date:{night_id}")
+        kb.button(text="📍 Изменить место", callback_data=f"hn_loc:{night_id}")
+        kb.button(text="🎲 Управление играми", callback_data=f"hn_sessions:{night_id}")
+        kb.button(text="🗑 Удалить игротеку", callback_data=f"hn_del:{night_id}")
     kb.button(text="⬅️ К списку", callback_data="host_manage_list")
     kb.adjust(1)
     return kb.as_markup()
@@ -164,10 +154,11 @@ def cancel_edit(night_id: int) -> InlineKeyboardMarkup:
     return kb.as_markup()
 
 
+# ---------- Поиск игр ----------
+
 def games_search_results(night_id: int,
                          games: list[dict],
                          prefix: str = "addgame") -> InlineKeyboardMarkup:
-    """Результаты поиска при добавлении игры в существующую игротеку."""
     kb = InlineKeyboardBuilder()
     for g in games:
         kb.button(
@@ -181,7 +172,6 @@ def games_search_results(night_id: int,
 
 
 def games_search_create(games: list[dict]) -> InlineKeyboardMarkup:
-    """Результаты поиска при создании новой игротеки."""
     kb = InlineKeyboardBuilder()
     for g in games:
         kb.button(
@@ -195,7 +185,6 @@ def games_search_create(games: list[dict]) -> InlineKeyboardMarkup:
 
 
 def search_prompt_keyboard(cancel_callback: str) -> InlineKeyboardMarkup:
-    """Клавиатура под подсказкой поиска — только кнопка «Отмена»."""
     kb = InlineKeyboardBuilder()
     kb.button(text="❌ Отмена", callback_data=cancel_callback)
     kb.adjust(1)

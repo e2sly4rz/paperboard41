@@ -12,6 +12,7 @@ from database.queries import (
     list_pending_users,
 )
 from keyboards.menus import main_menu, admin_help_back
+from utils import is_admin
 
 router = Router()
 
@@ -22,11 +23,11 @@ async def cmd_start(message: Message) -> None:
     await ensure_user(u.id, u.username, u.first_name, u.last_name)
     user = await get_user(u.id)
 
-    if u.id == ADMIN_ID:
+    if is_admin(u.id):
         pending = await list_pending_users()
-        is_host = bool(user and user["subscriber_level"] == "host")
+        is_host = bool(user and user["subscriber_level"] == "host") or True
         await message.answer(
-            f"👑 Здравствуй хозяин! \n\n"
+            f"👑 Вы администратор.\n\n"
             f"Заявок на доступ: {len(pending)}",
             reply_markup=main_menu(is_host, u.id),
         )
@@ -63,7 +64,10 @@ async def cmd_start(message: Message) -> None:
 @router.callback_query(F.data == "back_main")
 async def back_main(call: CallbackQuery) -> None:
     user = await get_user(call.from_user.id)
-    is_host = bool(user and user["subscriber_level"] == "host")
+    is_host = (
+        bool(user and user["subscriber_level"] == "host")
+        or is_admin(call.from_user.id)
+    )
     await call.message.edit_text(
         "Главное меню:",
         reply_markup=main_menu(is_host, call.from_user.id),
@@ -71,7 +75,7 @@ async def back_main(call: CallbackQuery) -> None:
     await call.answer()
 
 
-# ---------- Справка по командам (только для админа) ----------
+# ---------- Справка по командам ----------
 
 ADMIN_HELP_TEXT = (
     "❓ <b>Справочник команд администратора</b>\n\n"
@@ -98,7 +102,7 @@ ADMIN_HELP_TEXT = (
 
 @router.callback_query(F.data == "admin_help")
 async def admin_help(call: CallbackQuery) -> None:
-    if call.from_user.id != ADMIN_ID:
+    if not is_admin(call.from_user.id):
         await call.answer("Только для администратора", show_alert=True)
         return
     await call.message.edit_text(
@@ -111,7 +115,7 @@ async def admin_help(call: CallbackQuery) -> None:
 
 @router.message(Command("help"))
 async def cmd_help(message: Message) -> None:
-    if message.from_user.id != ADMIN_ID:
+    if not is_admin(message.from_user.id):
         await message.answer("Команда доступна только администратору.")
         return
     await message.answer(
@@ -132,7 +136,7 @@ async def cmd_id(message: Message) -> None:
 
 @router.message(Command("pending"))
 async def cmd_pending(message: Message) -> None:
-    if message.from_user.id != ADMIN_ID:
+    if not is_admin(message.from_user.id):
         return
     users = await list_pending_users()
     if not users:
@@ -150,7 +154,7 @@ async def cmd_pending(message: Message) -> None:
 
 @router.message(Command("approve"))
 async def cmd_approve(message: Message) -> None:
-    if message.from_user.id != ADMIN_ID:
+    if not is_admin(message.from_user.id):
         return
     parts = message.text.split()
     if len(parts) != 2 or not parts[1].isdigit():
@@ -177,7 +181,7 @@ async def cmd_approve(message: Message) -> None:
 
 @router.message(Command("revoke"))
 async def cmd_revoke(message: Message) -> None:
-    if message.from_user.id != ADMIN_ID:
+    if not is_admin(message.from_user.id):
         return
     parts = message.text.split()
     if len(parts) != 2 or not parts[1].isdigit():
@@ -193,7 +197,7 @@ async def cmd_revoke(message: Message) -> None:
 
 @router.message(Command("grant"))
 async def grant_role(message: Message) -> None:
-    if message.from_user.id != ADMIN_ID:
+    if not is_admin(message.from_user.id):
         return
     parts = message.text.split()
     if len(parts) != 3:

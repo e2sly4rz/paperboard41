@@ -76,24 +76,16 @@ async def _column_exists(db: aiosqlite.Connection, table: str, column: str) -> b
 
 
 async def _run_migrations(db: aiosqlite.Connection) -> None:
-    """Идемпотентные миграции для существующих БД.
-
-    Добавляют недостающие колонки в уже созданные таблицы.
-    CREATE TABLE IF NOT EXISTS их не добавит.
-    """
-    # users.is_approved
     if not await _column_exists(db, "users", "is_approved"):
         await db.execute(
             "ALTER TABLE users ADD COLUMN is_approved INTEGER DEFAULT 0"
         )
 
-    # games.owner_user_id
     if not await _column_exists(db, "games", "owner_user_id"):
         await db.execute(
             "ALTER TABLE games ADD COLUMN owner_user_id INTEGER"
         )
 
-    # Индекс на владельца — тоже создаём идемпотентно
     await db.execute(
         "CREATE INDEX IF NOT EXISTS idx_games_owner ON games(owner_user_id)"
     )

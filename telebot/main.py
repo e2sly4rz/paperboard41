@@ -42,10 +42,7 @@ async def main() -> None:
     )
 
     dp = Dispatcher()
-
-    # AccessMiddleware первым — отсекает чужих до всех хендлеров
     dp.update.middleware(AccessMiddleware())
-
     dp.include_router(setup_routers())
 
     logging.info("Бот запущен, начинаю polling")

@@ -4,7 +4,6 @@ import aiosqlite
 from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
-from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from config import DB_PATH
 from database.queries import (
@@ -12,7 +11,7 @@ from database.queries import (
     get_user,
     create_game_night,
     add_session,
-    list_host_nights,
+    list_all_upcoming_nights,
     get_night,
     get_night_sessions_for_edit,
     update_night_date,
@@ -37,6 +36,7 @@ from keyboards.menus import (
     search_prompt_keyboard,
 )
 from states.states import CreateNight, EditNight, AddSessionToNight
+from utils import is_admin
 
 router = Router()
 
@@ -44,6 +44,19 @@ router = Router()
 async def _is_host(user_id: int) -> bool:
     user = await get_user(user_id)
     return bool(user and user["subscriber_level"] == "host")
+
+
+async def _is_host_or_admin(user_id: int) -> bool:
+    return is_admin(user_id) or await _is_host(user_id)
+
+
+async def _can_manage_night(user_id: int, night: dict | None) -> bool:
+    """Право управлять игротекой: владелец-хост или админ."""
+    if night is None:
+        return False
+    if is_admin(user_id):
+        return True
+    return night["host_telegram_id"] == user_id
 
 
 def _fmt_date(iso_date: str) -> str:
@@ -57,8 +70,8 @@ def _fmt_date(iso_date: str) -> str:
 
 @router.callback_query(F.data == "host_menu")
 async def open_host_menu(call: CallbackQuery) -> None:
-    if not await _is_host(call.from_user.id):
-        await call.answer("Только для хостов", show_alert=True)
+    if not await _is_host_or_admin(call.from_user.id):
+        await call.answer("Только для организаторов", show_alert=True)
         return
     await call.message.edit_text("Меню организатора:", reply_markup=host_menu())
     await call.answer()
@@ -68,8 +81,8 @@ async def open_host_menu(call: CallbackQuery) -> None:
 
 @router.callback_query(F.data == "host_create")
 async def start_create(call: CallbackQuery, state: FSMContext) -> None:
-    if not await _is_host(call.from_user.id):
-        await call.answer("Только хосты могут создавать игротеки", show_alert=True)
+    if not await _is_host_or_admin(call.from_user.id):
+        await call.answer("Только организаторы могут создавать игротеки", show_alert=True)
         return
     await state.clear()
     await state.set_state(CreateNight.date)
@@ -112,6 +125,7 @@ async def create_search_again(call: CallbackQuery, state: FSMContext) -> None:
         reply_markup=search_prompt_keyboard("host_cancel"),
     )
     await call.answer()
+
 
 @router.message(CreateNight.searching_game)
 async def create_search(message: Message, state: FSMContext) -> None:
@@ -203,7 +217,6 @@ async def enter_slots(message: Message, state: FSMContext) -> None:
         slots,
     )
 
-    # Показываем, что добавлено, и предлагаем добавить ещё или завершить
     date_display = data.get("date_display", data["date"])
     text = (
         f"✅ Добавлена игра «{game['title']}» "
@@ -212,11 +225,10 @@ async def enter_slots(message: Message, state: FSMContext) -> None:
         f"Что дальше?"
     )
 
-    # Очищаем выбор игры, но сохраняем night_id, дату, место
     await state.update_data(game_id=None, time_start=None, time_end=None, slots=None)
     await state.set_state(CreateNight.searching_game)
 
-    # Клавиатура: добавить ещё / завершить
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
     kb = InlineKeyboardBuilder()
     kb.button(text="➕ Добавить ещё игру", callback_data="host_add_more")
     kb.button(text="✅ Завершить создание", callback_data="host_finish")
@@ -238,8 +250,7 @@ async def host_add_more(call: CallbackQuery, state: FSMContext) -> None:
 
 @router.callback_query(F.data == "host_finish")
 async def host_finish(call: CallbackQuery, state: FSMContext) -> None:
-    user = await get_user(call.from_user.id)
-    is_host = bool(user and user["subscriber_level"] == "host")
+    is_host = await _is_host_or_admin(call.from_user.id)
     data = await state.get_data()
     await state.clear()
 
@@ -264,8 +275,7 @@ async def host_finish(call: CallbackQuery, state: FSMContext) -> None:
 
 @router.callback_query(F.data == "host_cancel")
 async def host_cancel(call: CallbackQuery, state: FSMContext) -> None:
-    user = await get_user(call.from_user.id)
-    is_host = bool(user and user["subscriber_level"] == "host")
+    is_host = await _is_host_or_admin(call.from_user.id)
     await state.clear()
     await call.message.edit_text(
         "Создание игротеки отменено.",
@@ -274,41 +284,53 @@ async def host_cancel(call: CallbackQuery, state: FSMContext) -> None:
     await call.answer()
 
 
-# ============ СПИСОК ИГРОТЕК ХОСТА ============
+# ============ СПИСОК ИГРОТЕК ============
 
 @router.callback_query(F.data == "host_manage_list")
 async def manage_list(call: CallbackQuery) -> None:
-    if not await _is_host(call.from_user.id):
-        await call.answer("Только для хостов", show_alert=True)
+    if not await _is_host_or_admin(call.from_user.id):
+        await call.answer("Только для организаторов", show_alert=True)
         return
-    nights = await list_host_nights(call.from_user.id)
+
+    nights = await list_all_upcoming_nights()
     if not nights:
         await call.message.edit_text(
-            "У вас нет предстоящих игротек.", reply_markup=host_menu()
+            "Нет предстоящих игротек.",
+            reply_markup=host_menu(),
         )
         await call.answer()
         return
+
+    own_ids = set()
+    for n in nights:
+        if await _can_manage_night(call.from_user.id, n):
+            own_ids.add(n["id"])
+
     await call.message.edit_text(
-        "Ваши предстоящие игротеки:", reply_markup=host_nights_list(nights)
+        "Предстоящие игротеки:",
+        reply_markup=host_nights_list(nights, own_ids),
     )
     await call.answer()
 
 
-# ============ КАРТОЧКА ИГРОТЕКИ (С УЧАСТНИКАМИ) ============
+# ============ КАРТОЧКА ИГРОТЕКИ ============
 
 @router.callback_query(F.data.startswith("hn:"))
 async def night_card(call: CallbackQuery) -> None:
+    if not await _is_host_or_admin(call.from_user.id):
+        await call.answer("Только для организаторов", show_alert=True)
+        return
+
     night_id = int(call.data.split(":")[1])
     night = await get_night(night_id)
     if not night:
         await call.answer("Игротека не найдена", show_alert=True)
         return
-    if night["host_telegram_id"] != call.from_user.id:
-        await call.answer("Это не ваша игротека", show_alert=True)
-        return
+
+    can_manage = await _can_manage_night(call.from_user.id, night)
+    is_own = night["host_telegram_id"] == call.from_user.id
 
     rows = await get_all_night_registrations(night_id)
-
     sessions: dict[int, dict] = {}
     for r in rows:
         sid = r["session_id"]
@@ -334,6 +356,10 @@ async def night_card(call: CallbackQuery) -> None:
         f"📍 {night['location']}",
         f"Игр: {night['sessions_count']} • Записей: {night['total_taken']}",
     ]
+    if is_admin(call.from_user.id) and not is_own:
+        lines.append("<i>(админ: игротека другого хоста)</i>")
+    elif not can_manage:
+        lines.append("<i>(игротека другого хоста)</i>")
 
     if not sessions:
         lines.append("\n<i>В этой игротеке пока нет игр.</i>")
@@ -355,25 +381,24 @@ async def night_card(call: CallbackQuery) -> None:
                     lines.append(f"{i}. {name}{username}")
 
     text = "\n".join(lines)
-
     if len(text) > 4000:
         text = text[:3990] + "\n\n<i>…список обрезан</i>"
 
     await call.message.edit_text(
         text,
         parse_mode="HTML",
-        reply_markup=host_night_card(night_id),
+        reply_markup=host_night_card(night_id, is_owner=can_manage),
     )
     await call.answer()
 
 
-# ============ РЕДАКТИРОВАНИЕ ДАТЫ ============
+# ============ РЕДАКТИРОВАНИЕ ============
 
 @router.callback_query(F.data.startswith("hn_date:"))
 async def edit_date(call: CallbackQuery, state: FSMContext) -> None:
     night_id = int(call.data.split(":")[1])
     night = await get_night(night_id)
-    if not night or night["host_telegram_id"] != call.from_user.id:
+    if not await _can_manage_night(call.from_user.id, night):
         await call.answer("Нет доступа", show_alert=True)
         return
     await state.set_state(EditNight.new_date)
@@ -395,6 +420,13 @@ async def save_date(message: Message, state: FSMContext) -> None:
         return
     data = await state.get_data()
     night_id = data["night_id"]
+
+    night = await get_night(night_id)
+    if not await _can_manage_night(message.from_user.id, night):
+        await state.clear()
+        await message.answer("Нет доступа к этой игротеке.")
+        return
+
     await update_night_date(night_id, parsed.strftime("%Y-%m-%d"))
     await state.clear()
 
@@ -407,16 +439,15 @@ async def save_date(message: Message, state: FSMContext) -> None:
         f"Игр: {night['sessions_count']}\n"
         f"Записей: {night['total_taken']}"
     )
-    await message.answer(text, reply_markup=host_night_card(night_id))
+    can_manage = await _can_manage_night(message.from_user.id, night)
+    await message.answer(text, reply_markup=host_night_card(night_id, is_owner=can_manage))
 
-
-# ============ РЕДАКТИРОВАНИЕ МЕСТА ============
 
 @router.callback_query(F.data.startswith("hn_loc:"))
 async def edit_location(call: CallbackQuery, state: FSMContext) -> None:
     night_id = int(call.data.split(":")[1])
     night = await get_night(night_id)
-    if not night or night["host_telegram_id"] != call.from_user.id:
+    if not await _can_manage_night(call.from_user.id, night):
         await call.answer("Нет доступа", show_alert=True)
         return
     await state.set_state(EditNight.new_location)
@@ -437,6 +468,13 @@ async def save_location(message: Message, state: FSMContext) -> None:
         return
     data = await state.get_data()
     night_id = data["night_id"]
+
+    night = await get_night(night_id)
+    if not await _can_manage_night(message.from_user.id, night):
+        await state.clear()
+        await message.answer("Нет доступа к этой игротеке.")
+        return
+
     await update_night_location(night_id, new_location)
     await state.clear()
 
@@ -449,7 +487,8 @@ async def save_location(message: Message, state: FSMContext) -> None:
         f"Игр: {night['sessions_count']}\n"
         f"Записей: {night['total_taken']}"
     )
-    await message.answer(text, reply_markup=host_night_card(night_id))
+    can_manage = await _can_manage_night(message.from_user.id, night)
+    await message.answer(text, reply_markup=host_night_card(night_id, is_owner=can_manage))
 
 
 # ============ УПРАВЛЕНИЕ ИГРАМИ ============
@@ -458,7 +497,7 @@ async def save_location(message: Message, state: FSMContext) -> None:
 async def sessions_manage(call: CallbackQuery) -> None:
     night_id = int(call.data.split(":")[1])
     night = await get_night(night_id)
-    if not night or night["host_telegram_id"] != call.from_user.id:
+    if not await _can_manage_night(call.from_user.id, night):
         await call.answer("Нет доступа", show_alert=True)
         return
 
@@ -471,7 +510,7 @@ async def sessions_manage(call: CallbackQuery) -> None:
             f"Игр: 0\n"
             f"Записей: 0\n\n"
             f"В игротеке пока нет игр. Добавьте первую.",
-            reply_markup=host_night_card(night_id),
+            reply_markup=host_night_card(night_id, is_owner=True),
         )
         await call.answer()
         return
@@ -505,7 +544,7 @@ async def session_delete_confirm(call: CallbackQuery) -> None:
 
     night_id = row["game_night_id"]
     night = await get_night(night_id)
-    if not night or night["host_telegram_id"] != call.from_user.id:
+    if not await _can_manage_night(call.from_user.id, night):
         await call.answer("Нет доступа", show_alert=True)
         return
 
@@ -540,13 +579,18 @@ async def session_delete_confirm_yes(call: CallbackQuery) -> None:
         return
 
     night_id = row["game_night_id"]
+    night = await get_night(night_id)
+    if not await _can_manage_night(call.from_user.id, night):
+        await call.answer("Нет доступа", show_alert=True)
+        return
+
     await delete_session(session_id)
 
     sessions = await get_night_sessions_for_edit(night_id)
     if not sessions:
         await call.message.edit_text(
             "Все игры удалены. В игротеке больше нет сессий.",
-            reply_markup=host_night_card(night_id),
+            reply_markup=host_night_card(night_id, is_owner=True),
         )
     else:
         await call.message.edit_text(
@@ -562,7 +606,7 @@ async def session_delete_confirm_yes(call: CallbackQuery) -> None:
 async def night_delete_confirm(call: CallbackQuery) -> None:
     night_id = int(call.data.split(":")[1])
     night = await get_night(night_id)
-    if not night or night["host_telegram_id"] != call.from_user.id:
+    if not await _can_manage_night(call.from_user.id, night):
         await call.answer("Нет доступа", show_alert=True)
         return
 
@@ -589,34 +633,43 @@ async def night_delete_confirm(call: CallbackQuery) -> None:
 async def night_delete_confirm_yes(call: CallbackQuery) -> None:
     night_id = int(call.data.split(":")[1])
     night = await get_night(night_id)
-    if not night or night["host_telegram_id"] != call.from_user.id:
+    if not await _can_manage_night(call.from_user.id, night):
         await call.answer("Нет доступа", show_alert=True)
         return
 
     await delete_night(night_id)
 
-    nights = await list_host_nights(call.from_user.id)
+    nights = await list_all_upcoming_nights()
+    own_ids = set()
+    for n in nights:
+        if await _can_manage_night(call.from_user.id, n):
+            own_ids.add(n["id"])
+
     if not nights:
         await call.message.edit_text(
-            "✅ Игротека удалена.\n\nУ вас больше нет предстоящих игротек.",
+            "✅ Игротека удалена.\n\nПредстоящих игротек больше нет.",
             reply_markup=host_menu(),
         )
     else:
         await call.message.edit_text(
-            "✅ Игротека удалена.\n\nВаши оставшиеся игротеки:",
-            reply_markup=host_nights_list(nights),
+            "✅ Игротека удалена.\n\nПредстоящие игротеки:",
+            reply_markup=host_nights_list(nights, own_ids),
         )
     await call.answer("Игротека удалена")
 
 
-# ============ ДОБАВЛЕНИЕ ИГРЫ В СУЩЕСТВУЮЩУЮ ИГРОТЕКУ ============
+# ============ ДОБАВЛЕНИЕ ИГРЫ В ИГРОТЕКУ ============
 
 @router.callback_query(F.data.startswith("hn_add:"))
 async def add_game_start(call: CallbackQuery, state: FSMContext) -> None:
+    if not await _is_host_or_admin(call.from_user.id):
+        await call.answer("Только для организаторов", show_alert=True)
+        return
+
     night_id = int(call.data.split(":")[1])
     night = await get_night(night_id)
-    if not night or night["host_telegram_id"] != call.from_user.id:
-        await call.answer("Нет доступа", show_alert=True)
+    if not night:
+        await call.answer("Игротека не найдена", show_alert=True)
         return
 
     await state.clear()
@@ -717,15 +770,20 @@ async def add_game_slots(message: Message, state: FSMContext) -> None:
 
     game = await get_game(game_id)
     night = await get_night(night_id)
+    can_manage = await _can_manage_night(message.from_user.id, night)
     sessions = await get_night_sessions_for_edit(night_id)
 
-    text = (
-        f"✅ Игра «{game['title']}» добавлена в игротеку.\n"
-        f"📅 {_fmt_date(night['date'])} • {night['location']}\n\n"
-        f"Нажмите 🗑 на игре, чтобы удалить её, "
-        f"или ➕, чтобы добавить ещё:"
-    )
-    await message.answer(
-        text,
-        reply_markup=host_sessions_list(night_id, sessions),
-    )
+    if can_manage:
+        text = (
+            f"✅ Игра «{game['title']}» добавлена в игротеку.\n"
+            f"📅 {_fmt_date(night['date'])} • {night['location']}\n\n"
+            f"Нажмите 🗑 на игре, чтобы удалить её, "
+            f"или ➕, чтобы добавить ещё:"
+        )
+        await message.answer(text, reply_markup=host_sessions_list(night_id, sessions))
+    else:
+        await message.answer(
+            f"✅ Игра «{game['title']}» добавлена в игротеку "
+            f"{_fmt_date(night['date'])} ({night['location']}).",
+            reply_markup=host_night_card(night_id, is_owner=False),
+        )
