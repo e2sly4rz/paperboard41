@@ -352,3 +352,64 @@ async def list_registrations_for_night(night_id: int) -> list[dict]:
             (night_id,),
         )
         return [dict(r) for r in await cur.fetchall()]
+
+async def get_session_registrations(session_id: int) -> list[dict]:
+    """Список записавшихся на конкретную сессию."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            """SELECT u.telegram_id, u.username, u.first_name, u.last_name,
+                      r.registered_at
+               FROM registrations r
+               JOIN users u ON u.telegram_id = r.user_telegram_id
+               WHERE r.session_id = ?
+               ORDER BY r.registered_at""",
+            (session_id,),
+        )
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def get_session_with_host(session_id: int) -> dict | None:
+    """Сессия вместе с id хоста игротеки — для проверки прав."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            """SELECT gs.id, gs.max_slots, gs.slots_taken,
+                      gs.time_start, gs.time_end,
+                      g.title,
+                      gn.id AS night_id, gn.date, gn.location,
+                      gn.host_telegram_id
+               FROM game_sessions gs
+               JOIN games g       ON g.id  = gs.game_id
+               JOIN game_nights gn ON gn.id = gs.game_night_id
+               WHERE gs.id = ?""",
+            (session_id,),
+        )
+        row = await cur.fetchone()
+        return dict(row) if row else None
+
+async def get_all_night_registrations(night_id: int) -> list[dict]:
+    """Все записи на игротеку, сгруппированные по сессиям.
+
+    Возвращает плоский список, отсортированный по времени начала игры.
+    Группировку делает вызывающий код.
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            """SELECT gs.id AS session_id,
+                      gs.time_start, gs.time_end,
+                      gs.max_slots, gs.slots_taken,
+                      g.title AS game_title, g.genre,
+                      u.telegram_id, u.username,
+                      u.first_name, u.last_name,
+                      r.registered_at
+               FROM game_sessions gs
+               JOIN games g ON g.id = gs.game_id
+               LEFT JOIN registrations r ON r.session_id = gs.id
+               LEFT JOIN users u ON u.telegram_id = r.user_telegram_id
+               WHERE gs.game_night_id = ?
+               ORDER BY gs.time_start, r.registered_at""",
+            (night_id,),
+        )
+        return [dict(r) for r in await cur.fetchall()]

@@ -50,11 +50,22 @@ def sessions_list(night_id: int, sessions: list[dict]) -> InlineKeyboardMarkup:
     return kb.as_markup()
 
 
-def session_card(session_id: int, can_register: bool) -> InlineKeyboardMarkup:
+def session_card(session_id: int,
+                 can_register: bool,
+                 show_participants: bool = False) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     if can_register:
         kb.button(text="✅ Записаться", callback_data=f"reg:{session_id}")
+    if show_participants:
+        kb.button(text="👥 Участники", callback_data=f"participants:{session_id}")
     kb.button(text="⬅️ Назад", callback_data="schedule")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def participants_back(session_id: int) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(text="⬅️ К игре", callback_data=f"session:{session_id}")
     kb.adjust(1)
     return kb.as_markup()
 
@@ -115,11 +126,19 @@ def host_nights_list(nights: list[dict]) -> InlineKeyboardMarkup:
 
 def host_night_card(night_id: int) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
+    kb.button(text="👥 Все участники", callback_data=f"hn_part:{night_id}")
     kb.button(text="📅 Изменить дату", callback_data=f"hn_date:{night_id}")
     kb.button(text="📍 Изменить место", callback_data=f"hn_loc:{night_id}")
     kb.button(text="🎲 Управление играми", callback_data=f"hn_sessions:{night_id}")
     kb.button(text="🗑 Удалить игротеку", callback_data=f"hn_del:{night_id}")
     kb.button(text="⬅️ К списку", callback_data="host_manage_list")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def night_participants_back(night_id: int) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(text="⬅️ К игротеке", callback_data=f"hn:{night_id}")
     kb.adjust(1)
     return kb.as_markup()
 

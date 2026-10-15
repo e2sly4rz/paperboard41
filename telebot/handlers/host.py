@@ -1,18 +1,41 @@
 from datetime import datetime
 
+import aiosqlite
 from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
+from config import DB_PATH
 from database.queries import (
     list_games,
     get_game,
     get_user,
     create_game_night,
     add_session,
+    list_host_nights,
+    get_night,
+    get_night_sessions_for_edit,
+    update_night_date,
+    update_night_location,
+    delete_night,
+    delete_session,
+    count_registrations_for_night,
+    get_all_night_registrations,
 )
-from keyboards.menus import games_picker, confirm_session, main_menu
-from states.states import CreateNight
+from keyboards.menus import (
+    games_picker,
+    confirm_session,
+    main_menu,
+    host_menu,
+    host_nights_list,
+    host_night_card,
+    host_sessions_list,
+    confirm_delete_night,
+    confirm_delete_session,
+    cancel_edit,
+    night_participants_back,
+)
+from states.states import CreateNight, EditNight
 
 router = Router()
 
@@ -23,15 +46,34 @@ async def _is_host(user_id: int) -> bool:
     return bool(user and user["subscriber_level"] == "host")
 
 
-# ---------- Создание игротеки ----------
+def _fmt_date(iso_date: str) -> str:
+    """ГГГГ-ММ-ДД → ДД.ММ.ГГГГ."""
+    try:
+        return datetime.strptime(iso_date, "%Y-%m-%d").strftime("%d.%m.%Y")
+    except (ValueError, TypeError):
+        return iso_date or "—"
+
+
+# ============ МЕНЮ ОРГАНИЗАТОРА ============
+
+@router.callback_query(F.data == "host_menu")
+async def open_host_menu(call: CallbackQuery) -> None:
+    if not await _is_host(call.from_user.id):
+        await call.answer("Только для хостов", show_alert=True)
+        return
+    await call.message.edit_text(
+        "Меню организатора:",
+        reply_markup=host_menu(),
+    )
+    await call.answer()
+
+
+# ============ СОЗДАНИЕ ИГРОТЕКИ ============
 
 @router.callback_query(F.data == "host_create")
 async def start_create(call: CallbackQuery, state: FSMContext) -> None:
     if not await _is_host(call.from_user.id):
-        await call.answer(
-            "Только хосты могут создавать игротеки",
-            show_alert=True,
-        )
+        await call.answer("Только хосты могут создавать игротеки", show_alert=True)
         return
     await state.clear()
     await state.set_state(CreateNight.date)
@@ -41,17 +83,13 @@ async def start_create(call: CallbackQuery, state: FSMContext) -> None:
     await call.answer()
 
 
-# ---------- Пошаговый ввод ----------
-
 @router.message(CreateNight.date)
 async def enter_date(message: Message, state: FSMContext) -> None:
     # Пользователь вводит ДД.ММ.ГГГГ, в БД храним ГГГГ-ММ-ДД
     try:
         parsed = datetime.strptime(message.text.strip(), "%d.%m.%Y")
     except ValueError:
-        await message.answer(
-            "Неверный формат. Введите дату как ДД.ММ.ГГГГ:"
-        )
+        await message.answer("Неверный формат. Введите дату как ДД.ММ.ГГГГ:")
         return
     await state.update_data(date=parsed.strftime("%Y-%m-%d"))
     await state.update_data(date_display=parsed.strftime("%d.%m.%Y"))
@@ -102,9 +140,7 @@ async def enter_time_end(message: Message, state: FSMContext) -> None:
         return
     data = await state.get_data()
     if message.text.strip() <= data["time_start"]:
-        await message.answer(
-            "Время окончания должно быть позже начала. Повторите:"
-        )
+        await message.answer("Время окончания должно быть позже начала. Повторите:")
         return
     await state.update_data(time_end=message.text.strip())
     await state.set_state(CreateNight.slots)
@@ -150,8 +186,6 @@ async def enter_slots(message: Message, state: FSMContext) -> None:
     await message.answer(text, reply_markup=games_picker(games))
 
 
-# ---------- Завершение и отмена ----------
-
 @router.callback_query(F.data == "host_add_more")
 async def host_add_more(call: CallbackQuery, state: FSMContext) -> None:
     games = await list_games()
@@ -190,93 +224,8 @@ async def host_cancel(call: CallbackQuery, state: FSMContext) -> None:
     )
     await call.answer()
 
-from datetime import datetime
 
-from aiogram import Router, F
-from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
-
-from database.queries import (
-    list_games,
-    get_game,
-    get_user,
-    create_game_night,
-    add_session,
-    list_host_nights,
-    get_night,
-    get_night_sessions_for_edit,
-    update_night_date,
-    update_night_location,
-    delete_night,
-    delete_session,
-    count_registrations_for_night,
-    list_registrations_for_night,
-)
-from keyboards.menus import (
-    games_picker,
-    confirm_session,
-    main_menu,
-    host_menu,
-    host_nights_list,
-    host_night_card,
-    host_sessions_list,
-    confirm_delete_night,
-    confirm_delete_session,
-    cancel_edit,
-)
-from states.states import CreateNight, EditNight
-
-router = Router()
-
-
-async def _is_host(user_id: int) -> bool:
-    user = await get_user(user_id)
-    return bool(user and user["subscriber_level"] == "host")
-
-
-def _fmt_date(iso_date: str) -> str:
-    try:
-        return datetime.strptime(iso_date, "%Y-%m-%d").strftime("%d.%m.%Y")
-    except (ValueError, TypeError):
-        return iso_date or "—"
-
-
-# ---------- Существующий код создания ----------
-# (start_create, enter_date, enter_location, pick_game,
-#  enter_time_start, enter_time_end, enter_slots,
-#  host_add_more, host_finish, host_cancel — оставляем как есть,
-#  но заменим кнопку "host_create" на переход в host_menu.)
-
-
-@router.callback_query(F.data == "host_create")
-async def start_create(call: CallbackQuery, state: FSMContext) -> None:
-    if not await _is_host(call.from_user.id):
-        await call.answer("Только хосты могут создавать игротеки", show_alert=True)
-        return
-    await state.clear()
-    await state.set_state(CreateNight.date)
-    await call.message.edit_text(
-        "Создание игротеки.\n\nВведите дату в формате ДД.ММ.ГГГГ:"
-    )
-    await call.answer()
-
-
-# ... остальные хендлеры создания без изменений ...
-
-
-# ---------- Меню управления ----------
-
-@router.callback_query(F.data == "host_menu")
-async def open_host_menu(call: CallbackQuery) -> None:
-    if not await _is_host(call.from_user.id):
-        await call.answer("Только для хостов", show_alert=True)
-        return
-    await call.message.edit_text(
-        "Меню организатора:",
-        reply_markup=host_menu(),
-    )
-    await call.answer()
-
+# ============ СПИСОК ИГРОТЕК ХОСТА ============
 
 @router.callback_query(F.data == "host_manage_list")
 async def manage_list(call: CallbackQuery) -> None:
@@ -298,7 +247,7 @@ async def manage_list(call: CallbackQuery) -> None:
     await call.answer()
 
 
-# ---------- Карточка игротеки ----------
+# ============ КАРТОЧКА ИГРОТЕКИ ============
 
 @router.callback_query(F.data.startswith("hn:"))
 async def night_card(call: CallbackQuery) -> None:
@@ -322,7 +271,77 @@ async def night_card(call: CallbackQuery) -> None:
     await call.answer()
 
 
-# ---------- Редактирование даты ----------
+# ============ СВОДНЫЙ СПИСОК УЧАСТНИКОВ ============
+
+@router.callback_query(F.data.startswith("hn_part:"))
+async def night_participants(call: CallbackQuery) -> None:
+    night_id = int(call.data.split(":")[1])
+    night = await get_night(night_id)
+    if not night or night["host_telegram_id"] != call.from_user.id:
+        await call.answer("Нет доступа", show_alert=True)
+        return
+
+    rows = await get_all_night_registrations(night_id)
+
+    # Группируем по session_id, сохраняя порядок (уже отсортирован по времени)
+    sessions: dict[int, dict] = {}
+    for r in rows:
+        sid = r["session_id"]
+        if sid not in sessions:
+            sessions[sid] = {
+                "time_start": r["time_start"],
+                "time_end": r["time_end"],
+                "game_title": r["game_title"],
+                "max_slots": r["max_slots"],
+                "slots_taken": r["slots_taken"],
+                "players": [],
+            }
+        if r["telegram_id"] is not None:
+            sessions[sid]["players"].append({
+                "first_name": r["first_name"],
+                "last_name": r["last_name"],
+                "username": r["username"],
+            })
+
+    header = (
+        f"👥 <b>Участники игротеки</b>\n"
+        f"📅 {_fmt_date(night['date'])}\n"
+        f"📍 {night['location']}\n"
+        f"Всего записей: {night['total_taken']}\n"
+    )
+
+    if not sessions:
+        body = "\n\nВ этой игротеке пока нет игр."
+    else:
+        blocks = []
+        for s in sessions.values():
+            time_range = f"{s['time_start']}–{s['time_end'] or '?'}"
+            block_header = (
+                f"\n🎲 <b>{s['game_title']}</b>\n"
+                f"⏰ {time_range} • "
+                f"занято {s['slots_taken']} из {s['max_slots']}"
+            )
+            if not s["players"]:
+                blocks.append(block_header + "\n— никто не записан")
+            else:
+                lines = []
+                for i, p in enumerate(s["players"], 1):
+                    name_parts = [p["first_name"] or "", p["last_name"] or ""]
+                    name = " ".join(x for x in name_parts if x).strip() or "Без имени"
+                    username = f" (@{p['username']})" if p["username"] else ""
+                    lines.append(f"{i}. {name}{username}")
+                blocks.append(block_header + "\n" + "\n".join(lines))
+        body = "\n".join(blocks)
+
+    await call.message.edit_text(
+        header + body,
+        parse_mode="HTML",
+        reply_markup=night_participants_back(night_id),
+    )
+    await call.answer()
+
+
+# ============ РЕДАКТИРОВАНИЕ ДАТЫ ============
 
 @router.callback_query(F.data.startswith("hn_date:"))
 async def edit_date(call: CallbackQuery, state: FSMContext) -> None:
@@ -365,7 +384,7 @@ async def save_date(message: Message, state: FSMContext) -> None:
     await message.answer(text, reply_markup=host_night_card(night_id))
 
 
-# ---------- Редактирование места ----------
+# ============ РЕДАКТИРОВАНИЕ МЕСТА ============
 
 @router.callback_query(F.data.startswith("hn_loc:"))
 async def edit_location(call: CallbackQuery, state: FSMContext) -> None:
@@ -407,7 +426,7 @@ async def save_location(message: Message, state: FSMContext) -> None:
     await message.answer(text, reply_markup=host_night_card(night_id))
 
 
-# ---------- Управление сессиями ----------
+# ============ УПРАВЛЕНИЕ ИГРАМИ ============
 
 @router.callback_query(F.data.startswith("hn_sessions:"))
 async def sessions_manage(call: CallbackQuery) -> None:
@@ -434,11 +453,9 @@ async def sessions_manage(call: CallbackQuery) -> None:
 @router.callback_query(F.data.startswith("hs_del:"))
 async def session_delete_confirm(call: CallbackQuery) -> None:
     session_id = int(call.data.split(":")[1])
-    # Достаём night_id через сессию
-    async with __import__("aiosqlite").connect(
-        __import__("config").DB_PATH
-    ) as db:
-        db.row_factory = __import__("aiosqlite").Row
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
         cur = await db.execute(
             """SELECT gs.game_night_id, gs.slots_taken, g.title
                FROM game_sessions gs
@@ -475,11 +492,9 @@ async def session_delete_confirm(call: CallbackQuery) -> None:
 @router.callback_query(F.data.startswith("hs_del_yes:"))
 async def session_delete_confirm_yes(call: CallbackQuery) -> None:
     session_id = int(call.data.split(":")[1])
-    # Получаем night_id до удаления
-    async with __import__("aiosqlite").connect(
-        __import__("config").DB_PATH
-    ) as db:
-        db.row_factory = __import__("aiosqlite").Row
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT game_night_id FROM game_sessions WHERE id = ?",
             (session_id,),
@@ -507,7 +522,7 @@ async def session_delete_confirm_yes(call: CallbackQuery) -> None:
     await call.answer("Игра удалена")
 
 
-# ---------- Удаление игротеки ----------
+# ============ УДАЛЕНИЕ ИГРОТЕКИ ============
 
 @router.callback_query(F.data.startswith("hn_del:"))
 async def night_delete_confirm(call: CallbackQuery) -> None:
