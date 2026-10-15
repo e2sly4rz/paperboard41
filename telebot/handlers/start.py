@@ -11,7 +11,7 @@ from database.queries import (
     revoke_user,
     list_pending_users,
 )
-from keyboards.menus import main_menu
+from keyboards.menus import main_menu, admin_help_back
 
 router = Router()
 
@@ -22,38 +22,41 @@ async def cmd_start(message: Message) -> None:
     await ensure_user(u.id, u.username, u.first_name, u.last_name)
     user = await get_user(u.id)
 
-    # Админ — сразу видит меню
     if u.id == ADMIN_ID:
+        pending = await list_pending_users()
         is_host = bool(user and user["subscriber_level"] == "host")
         await message.answer(
-            "👑 Вы администратор.\n\n"
-            f"Ожидают одобрения: {len(await list_pending_users())} чел.\n"
-            "Команды:\n"
-            "/approve &lt;id&gt; — одобрить\n"
-            "/revoke &lt;id&gt; — отозвать доступ\n"
-            "/pending — список заявок\n"
-            "/grant &lt;id&gt; host|provodnik|guest — выдать роль",
-            reply_markup=main_menu(is_host),
+            f"👑 Вы администратор.\n\n"
+            f"Заявок на доступ: {len(pending)}",
+            reply_markup=main_menu(is_host, u.id),
         )
         return
 
-    # Не одобрен — показываем статус заявки
     if not user["is_approved"]:
         await message.answer(
             "⏳ Заявка на доступ отправлена.\n\n"
-            "Организатор увидит её и подтвердит доступ. "
-            "Вы получите уведомление, когда доступ будет открыт.\n\n"
+            "Организатор увидит её и подтвердит доступ.\n\n"
             f"Ваш ID: <code>{u.id}</code>"
         )
+        try:
+            name = f"{u.first_name or ''} {u.last_name or ''}".strip() or "Без имени"
+            username = f" (@{u.username})" if u.username else ""
+            await message.bot.send_message(
+                ADMIN_ID,
+                f"🔔 Новая заявка на доступ:\n"
+                f"• <code>{u.id}</code> — {name}{username}\n\n"
+                f"Одобрить: /approve {u.id}",
+            )
+        except Exception:
+            pass
         return
 
-    # Одобренный обычный пользователь
     is_host = user["subscriber_level"] == "host"
     await message.answer(
         f"Привет, {u.first_name}!\n\n"
         "Это бот клуба настольных игр. Здесь можно посмотреть расписание "
         "игротек и записаться на игры.",
-        reply_markup=main_menu(is_host),
+        reply_markup=main_menu(is_host, u.id),
     )
 
 
@@ -63,9 +66,66 @@ async def back_main(call: CallbackQuery) -> None:
     is_host = bool(user and user["subscriber_level"] == "host")
     await call.message.edit_text(
         "Главное меню:",
-        reply_markup=main_menu(is_host),
+        reply_markup=main_menu(is_host, call.from_user.id),
     )
     await call.answer()
+
+
+# ---------- Справка по командам (только для админа) ----------
+
+ADMIN_HELP_TEXT = (
+    "❓ <b>Справочник команд администратора</b>\n\n"
+
+    "<b>Управление доступом</b>\n"
+    "<code>/pending</code> — список заявок на доступ\n"
+    "<code>/approve &lt;id&gt;</code> — одобрить пользователя\n"
+    "<code>/revoke &lt;id&gt;</code> — отозвать доступ\n\n"
+
+    "<b>Управление ролями</b>\n"
+    "<code>/grant &lt;id&gt; host</code> — сделать организатором\n"
+    "<code>/grant &lt;id&gt; provodnik</code> — выдать «Проводника»\n"
+    "<code>/grant &lt;id&gt; guest</code> — снять привилегии\n\n"
+
+    "<b>Прочее</b>\n"
+    "<code>/start</code> — главное меню\n"
+    "<code>/id</code> — узнать свой Telegram ID\n"
+    "<code>/help</code> — эта справка\n\n"
+
+    "💡 <i>ID пользователя можно узнать через @userinfobot "
+    "или командой /id.</i>"
+)
+
+
+@router.callback_query(F.data == "admin_help")
+async def admin_help(call: CallbackQuery) -> None:
+    if call.from_user.id != ADMIN_ID:
+        await call.answer("Только для администратора", show_alert=True)
+        return
+    await call.message.edit_text(
+        ADMIN_HELP_TEXT,
+        parse_mode="HTML",
+        reply_markup=admin_help_back(),
+    )
+    await call.answer()
+
+
+@router.message(Command("help"))
+async def cmd_help(message: Message) -> None:
+    if message.from_user.id != ADMIN_ID:
+        await message.answer("Команда доступна только администратору.")
+        return
+    await message.answer(
+        ADMIN_HELP_TEXT,
+        parse_mode="HTML",
+        reply_markup=admin_help_back(),
+    )
+
+
+@router.message(Command("id"))
+async def cmd_id(message: Message) -> None:
+    await message.answer(
+        f"Ваш Telegram ID: <code>{message.from_user.id}</code>"
+    )
 
 
 # ---------- Админ-команды ----------
@@ -84,7 +144,7 @@ async def cmd_pending(message: Message) -> None:
         name = " ".join(p for p in name_parts if p).strip() or "Без имени"
         username = f" (@{u['username']})" if u["username"] else ""
         lines.append(f"• <code>{u['telegram_id']}</code> — {name}{username}")
-    lines.append("\nОдобрить: /approve &lt;id&gt;")
+    lines.append("\nОдобрить: <code>/approve &lt;id&gt;</code>")
     await message.answer("\n".join(lines))
 
 
@@ -105,7 +165,6 @@ async def cmd_approve(message: Message) -> None:
         )
         return
     await message.answer(f"✅ Пользователь {target_id} одобрен.")
-    # Уведомляем пользователя, если можем
     try:
         await message.bot.send_message(
             target_id,
@@ -113,7 +172,6 @@ async def cmd_approve(message: Message) -> None:
             "Отправьте /start, чтобы начать.",
         )
     except Exception:
-        # Пользователь мог не начинать диалог с ботом или заблокировал его
         pass
 
 

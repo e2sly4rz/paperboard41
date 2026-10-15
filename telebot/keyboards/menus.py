@@ -3,6 +3,8 @@ from datetime import datetime
 from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from config import ADMIN_ID
+
 
 def _fmt_date(iso_date: str) -> str:
     try:
@@ -11,12 +13,22 @@ def _fmt_date(iso_date: str) -> str:
         return iso_date or "—"
 
 
-def main_menu(is_host: bool) -> InlineKeyboardMarkup:
+def main_menu(is_host: bool, user_id: int | None = None) -> InlineKeyboardMarkup:
+    """Главное меню. Кнопка «Справка» видна только админу."""
     kb = InlineKeyboardBuilder()
     kb.button(text="📅 Расписание", callback_data="schedule")
     kb.button(text="🎲 Мои записи", callback_data="my_games")
     if is_host:
         kb.button(text="🎩 Меню организатора", callback_data="host_menu")
+    if user_id is not None and user_id == ADMIN_ID:
+        kb.button(text="❓ Справка по командам", callback_data="admin_help")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def admin_help_back() -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(text="⬅️ В главное меню", callback_data="back_main")
     kb.adjust(1)
     return kb.as_markup()
 
