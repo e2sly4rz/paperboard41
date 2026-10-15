@@ -26,7 +26,7 @@ async def cmd_start(message: Message) -> None:
         pending = await list_pending_users()
         is_host = bool(user and user["subscriber_level"] == "host")
         await message.answer(
-            f"👑 Вы Администратор \n\n"
+            f"👑 Здравствуй хозяин! \n\n"
             f"Заявок на доступ: {len(pending)}",
             reply_markup=main_menu(is_host, u.id),
         )
