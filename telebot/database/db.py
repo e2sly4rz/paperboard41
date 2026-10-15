@@ -13,6 +13,19 @@ CREATE TABLE IF NOT EXISTS users (
     created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS notifications_log (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id    INTEGER NOT NULL,
+    user_id       INTEGER NOT NULL,
+    kind          TEXT NOT NULL,       -- 'day_before' | 'hour_before'
+    sent_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES game_sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id)    REFERENCES users(telegram_id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_notif_unique
+    ON notifications_log(session_id, user_id, kind);
+
 CREATE TABLE IF NOT EXISTS games (
     id                 INTEGER PRIMARY KEY AUTOINCREMENT,
     title              TEXT NOT NULL,

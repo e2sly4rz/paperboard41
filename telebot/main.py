@@ -11,6 +11,7 @@ from config import BOT_TOKEN
 from database.db import init_db
 from handlers import setup_routers
 from middleware.access import AccessMiddleware
+from scheduler import start_scheduler, stop_scheduler
 
 
 def build_session() -> AiohttpSession:
@@ -45,11 +46,13 @@ async def main() -> None:
     dp.update.middleware(AccessMiddleware())
     dp.include_router(setup_routers())
 
+    start_scheduler(bot)
     logging.info("Бот запущен, начинаю polling")
 
     try:
         await dp.start_polling(bot, polling_timeout=20)
     finally:
+        stop_scheduler()
         await bot.session.close()
         logging.info("Сессия бота закрыта")
 
