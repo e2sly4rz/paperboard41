@@ -195,3 +195,62 @@ def search_prompt_keyboard(cancel_callback: str) -> InlineKeyboardMarkup:
 async def get_calendar() -> SimpleCalendar:
     """Возвращает календарь с русской локализацией."""
     return SimpleCalendar(locale="ru_RU")
+
+def time_start_picker() -> InlineKeyboardMarkup:
+    """Кнопки времени начала с шагом 1 час: 10:00, 11:00, …, 23:00."""
+    kb = InlineKeyboardBuilder()
+    for hour in range(10, 24):
+        t = f"{hour:02d}:00"
+        kb.button(text=t, callback_data=f"pickstart:{t}")
+    kb.button(text="✏️ Ввести вручную", callback_data="pickstart:manual")
+    kb.adjust(4)
+    return kb.as_markup()
+
+
+def duration_picker(game: dict) -> InlineKeyboardMarkup:
+    """Кнопки длительности с шагом 1 час: 1 ч, 2 ч, …, 6 ч.
+
+    Если длительность попадает в диапазон duration_min–duration_max
+    из карточки игры — добавляется галочка ✓.
+    """
+    kb = InlineKeyboardBuilder()
+    dmin = game.get("duration_min") or 0
+    dmax = game.get("duration_max") or 999
+
+    for hours in range(1, 7):
+        minutes = hours * 60
+        label = f"{hours} ч"
+        if dmin <= minutes <= dmax:
+            label += " ✓"
+        kb.button(text=label, callback_data=f"pickdur:{minutes}")
+
+    kb.button(text="✏️ Ввести вручную", callback_data="pickdur:manual")
+    kb.adjust(3)
+    return kb.as_markup()
+
+
+def slots_picker_autofill(game: dict,
+                          default_slots: int) -> InlineKeyboardMarkup:
+    """Автоподстановка рекомендуемого количества мест.
+
+    Показывает max_players как основную кнопку + альтернативы.
+    """
+    kb = InlineKeyboardBuilder()
+
+    # Основная кнопка — max_players
+    kb.button(
+        text=f"✅ Поставить {default_slots} мест",
+        callback_data=f"pickslots:{default_slots}",
+    )
+
+    # Альтернативы — от min_players до max_players, кроме default
+    min_p = game.get("min_players") or 1
+    max_p = game.get("max_players") or default_slots
+    for n in range(min_p, max_p + 1):
+        if n == default_slots:
+            continue
+        kb.button(text=f"{n} мест", callback_data=f"pickslots:{n}")
+
+    kb.button(text="✏️ Ввести вручную", callback_data="pickslots:manual")
+    kb.adjust(1)
+    return kb.as_markup()
