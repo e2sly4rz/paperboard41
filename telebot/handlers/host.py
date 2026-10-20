@@ -1,9 +1,11 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import aiosqlite
 from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
+
+from aiogram_calendar import SimpleCalendar, SimpleCalendarCallback
 
 from config import DB_PATH
 from database.queries import (
@@ -84,25 +86,47 @@ async def start_create(call: CallbackQuery, state: FSMContext) -> None:
     if not await _is_host_or_admin(call.from_user.id):
         await call.answer("Только организаторы могут создавать игротеки", show_alert=True)
         return
+
     await state.clear()
     await state.set_state(CreateNight.date)
+
+    calendar = SimpleCalendar(locale="ru_RU.UTF-8", show_alerts=True)
+    calendar.set_dates_range(
+        datetime.now(),
+        datetime.now() + timedelta(days=365),
+    )
     await call.message.edit_text(
-        "Создание игротеки.\n\nВведите дату в формате ДД.ММ.ГГГГ:"
+        "Создание игротеки.\n\nВыберите дату:",
+        reply_markup=await calendar.start_calendar(),
     )
     await call.answer()
 
 
-@router.message(CreateNight.date)
-async def enter_date(message: Message, state: FSMContext) -> None:
-    try:
-        parsed = datetime.strptime(message.text.strip(), "%d.%m.%Y")
-    except ValueError:
-        await message.answer("Неверный формат. Введите дату как ДД.ММ.ГГГГ:")
+@router.callback_query(SimpleCalendarCallback.filter(), CreateNight.date)
+async def enter_date(
+    call: CallbackQuery,
+    callback_data: SimpleCalendarCallback,
+    state: FSMContext,
+) -> None:
+    calendar = SimpleCalendar(locale="ru_RU.UTF-8", show_alerts=True)
+    calendar.set_dates_range(
+        datetime.now(),
+        datetime.now() + timedelta(days=365),
+    )
+    selected, date_obj = await calendar.process_selection(call, callback_data)
+
+    if not selected:
         return
-    await state.update_data(date=parsed.strftime("%Y-%m-%d"))
-    await state.update_data(date_display=parsed.strftime("%d.%m.%Y"))
+
+    await state.update_data(date=date_obj.strftime("%Y-%m-%d"))
+    await state.update_data(date_display=date_obj.strftime("%d.%m.%Y"))
     await state.set_state(CreateNight.location)
-    await message.answer("Введите место проведения:")
+
+    await call.message.edit_text(
+        f"📅 Дата: {date_obj.strftime('%d.%m.%Y')}\n\n"
+        f"Введите место проведения:"
+    )
+    await call.answer()
 
 
 @router.message(CreateNight.location)

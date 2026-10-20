@@ -3,6 +3,8 @@ from datetime import datetime
 from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from aiogram_calendar import SimpleCalendar
+
 from config import ADMIN_ID
 
 
@@ -189,3 +191,7 @@ def search_prompt_keyboard(cancel_callback: str) -> InlineKeyboardMarkup:
     kb.button(text="❌ Отмена", callback_data=cancel_callback)
     kb.adjust(1)
     return kb.as_markup()
+
+async def get_calendar() -> SimpleCalendar:
+    """Возвращает календарь с русской локализацией."""
+    return SimpleCalendar(locale="ru_RU")
