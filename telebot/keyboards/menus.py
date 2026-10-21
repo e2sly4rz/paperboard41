@@ -60,11 +60,12 @@ def sessions_list(night_id: int, sessions: list[dict]) -> InlineKeyboardMarkup:
     return kb.as_markup()
 
 
-def session_card(session_id: int, can_register: bool) -> InlineKeyboardMarkup:
+def session_card(session_id: int, night_id: int,
+                 can_register: bool) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     if can_register:
         kb.button(text="✅ Записаться", callback_data=f"reg:{session_id}")
-    kb.button(text="⬅️ Назад", callback_data="schedule")
+    kb.button(text="⬅️ Назад", callback_data=f"night:{night_id}")
     kb.adjust(1)
     return kb.as_markup()
 

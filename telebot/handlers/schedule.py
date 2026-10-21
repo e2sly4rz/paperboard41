@@ -130,7 +130,7 @@ async def show_session(call: CallbackQuery) -> None:
     await call.message.edit_text(
         text,
         parse_mode="HTML",
-        reply_markup=session_card(session_id, can_register),
+        reply_markup=session_card(session_id, s["night_id"], can_register),
     )
     await call.answer()
 
@@ -158,5 +158,5 @@ async def do_register(call: CallbackQuery) -> None:
         await call.message.edit_text(
             text,
             parse_mode="HTML",
-            reply_markup=session_card(session_id, False),
+            reply_markup=session_card(session_id, s["night_id"], False),
         )

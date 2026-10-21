@@ -235,6 +235,7 @@ async def get_session(session_id: int) -> dict | None:
             """SELECT gs.*, g.title, g.genre, g.owner,
                       g.min_players, g.max_players,
                       g.is_subscriber_only,
+                      gn.id AS night_id,
                       gn.date, gn.location,
                       (gs.max_slots - gs.slots_taken) AS free_slots
                FROM game_sessions gs
