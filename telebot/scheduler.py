@@ -1,4 +1,5 @@
 import logging
+from collections import defaultdict
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -8,9 +9,9 @@ from aiogram.exceptions import TelegramForbiddenError, TelegramRetryAfter
 
 from config import CLUB_TIMEZONE
 from database.queries import (
-    list_sessions_with_registrations_for_notify,
-    was_notification_sent,
-    log_notification,
+    get_user_day_registrations,
+    was_day_notification_sent,
+    log_day_notification,
 )
 
 
@@ -27,7 +28,6 @@ def _fmt_date(iso_date: str) -> str:
 
 
 def _session_datetime(iso_date: str, time_str: str) -> datetime | None:
-    """Собирает timezone-aware datetime игры в часовом поясе клуба."""
     try:
         d = datetime.strptime(iso_date, "%Y-%m-%d")
         t = datetime.strptime(time_str, "%H:%M")
@@ -37,19 +37,28 @@ def _session_datetime(iso_date: str, time_str: str) -> datetime | None:
         return None
 
 
-def _build_message(kind: str, row: dict) -> str:
+def _build_group_message(kind: str, date: str, location: str,
+                         games: list[dict]) -> str:
+    """Одно сообщение на день с полным списком игр."""
     when = "завтра" if kind == "day_before" else "через час"
     icon = "📅" if kind == "day_before" else "⏰"
-    return (
-        f"{icon} <b>Напоминание: игра {when}</b>\n\n"
-        f"🎲 {row['game_title']}\n"
-        f"📅 {_fmt_date(row['date'])} в {row['time_start']}\n"
-        f"📍 {row['location']}"
-    )
+
+    lines = [
+        f"{icon} <b>Напоминание: игра {when}</b>",
+        f"📅 {_fmt_date(date)} • {location}",
+        "",
+        "<b>Вы записаны на:</b>",
+    ]
+    for g in games:
+        time_range = f"{g['time_start']}–{g['time_end'] or '?'}"
+        lines.append(f"🎲 {g['game_title']} — {time_range}")
+
+    lines.append("")
+    lines.append("Хорошей игры! 🎲")
+    return "\n".join(lines)
 
 
 async def _notify_user(bot: Bot, user_id: int, text: str) -> bool:
-    """Отправляет сообщение. Возвращает True при успехе."""
     try:
         await bot.send_message(user_id, text)
         return True
@@ -67,24 +76,36 @@ async def _notify_user(bot: Bot, user_id: int, text: str) -> bool:
 
 
 async def check_and_send_reminders(bot: Bot) -> None:
-    """Проходит по ближайшим сессиям и рассылает напоминания.
+    """Группирует записи по (user, date) и отправляет одно напоминание
+    на день, беря время самой ранней игры.
 
-    Запускается планировщиком каждые 10 минут.
-    Все сравнения времени — в часовом поясе клуба (CLUB_TIMEZONE).
+    Окна:
+      day_before  — 23–25 часов до первой игры дня
+      hour_before — 50–70 минут до первой игры дня
     """
     now = datetime.now(_TZ)
-    rows = await list_sessions_with_registrations_for_notify()
 
+    today = now.date().isoformat()
+    tomorrow = (now.date() + timedelta(days=1)).isoformat()
+
+    rows = await get_user_day_registrations(today, tomorrow)
+
+    # Группируем: (user_id, date) → список игр
+    groups: dict[tuple[int, str], list[dict]] = defaultdict(list)
     for row in rows:
-        session_dt = _session_datetime(row["date"], row["time_start"])
-        if session_dt is None:
+        groups[(row["telegram_id"], row["date"])].append(row)
+
+    for (user_id, date), games in groups.items():
+        # Сортируем по времени начала — первая запись в списке самая ранняя
+        games.sort(key=lambda g: g["time_start"])
+        earliest = games[0]
+
+        first_dt = _session_datetime(date, earliest["time_start"])
+        if first_dt is None:
             continue
 
-        delta = session_dt - now
+        delta = first_dt - now
 
-        # Определяем, какое напоминание сейчас уместно.
-        # Окна шире интервала планировщика (10 минут),
-        # чтобы не пропустить момент при задержке запуска.
         kind = None
         if timedelta(hours=23) <= delta <= timedelta(hours=25):
             kind = "day_before"
@@ -94,24 +115,21 @@ async def check_and_send_reminders(bot: Bot) -> None:
         if kind is None:
             continue
 
-        user_id = row["telegram_id"]
-
-        if await was_notification_sent(row["session_id"], user_id, kind):
+        if await was_day_notification_sent(user_id, date, kind):
             continue
 
-        text = _build_message(kind, row)
+        text = _build_group_message(kind, date, earliest["location"], games)
         ok = await _notify_user(bot, user_id, text)
 
         if ok:
-            await log_notification(row["session_id"], user_id, kind)
+            await log_day_notification(user_id, date, kind)
             logging.info(
-                "Напоминание %s отправлено: session=%s user=%s",
-                kind, row["session_id"], user_id,
+                "Напоминание %s отправлено: user=%s date=%s games=%d",
+                kind, user_id, date, len(games),
             )
 
 
 def start_scheduler(bot: Bot) -> None:
-    """Регистрирует задачи и запускает планировщик."""
     scheduler.add_job(
         check_and_send_reminders,
         trigger="interval",

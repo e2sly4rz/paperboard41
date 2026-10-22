@@ -495,27 +495,59 @@ async def list_sessions_with_registrations_for_notify() -> list[dict]:
         return [dict(r) for r in await cur.fetchall()]
 
 
-async def was_notification_sent(session_id: int, user_id: int,
-                                kind: str) -> bool:
+async def get_user_day_registrations(
+    date_from: str, date_to: str
+) -> list[dict]:
+    """Все записи на игры в диапазоне дат.
+
+    Возвращает плоский список строк (пользователь × игра).
+    Группировка по (user, date) — на стороне scheduler.
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            """SELECT u.telegram_id,
+                      u.first_name,
+                      u.username,
+                      gn.date,
+                      gn.location,
+                      gs.id           AS session_id,
+                      gs.time_start,
+                      gs.time_end,
+                      g.title          AS game_title
+               FROM registrations r
+               JOIN game_sessions gs ON gs.id = r.session_id
+               JOIN game_nights  gn ON gn.id = gs.game_night_id
+               JOIN games        g  ON g.id  = gs.game_id
+               JOIN users        u  ON u.telegram_id = r.user_telegram_id
+               WHERE gn.date >= ?
+                 AND gn.date <= ?
+               ORDER BY u.telegram_id, gn.date, gs.time_start""",
+            (date_from, date_to),
+        )
+        return [dict(r) for r in await cur.fetchall()]
+
+
+
+async def was_day_notification_sent(user_id: int, date: str,
+                                    kind: str) -> bool:
     async with aiosqlite.connect(DB_PATH) as db:
         cur = await db.execute(
             """SELECT 1 FROM notifications_log
-               WHERE session_id = ? AND user_id = ? AND kind = ?""",
-            (session_id, user_id, kind),
+               WHERE user_id = ? AND date = ? AND kind = ?""",
+            (user_id, date, kind),
         )
         return await cur.fetchone() is not None
 
 
-async def log_notification(session_id: int, user_id: int,
-                           kind: str) -> None:
+async def log_day_notification(user_id: int, date: str, kind: str) -> None:
     async with aiosqlite.connect(DB_PATH) as db:
         try:
             await db.execute(
-                """INSERT INTO notifications_log (session_id, user_id, kind)
+                """INSERT INTO notifications_log (user_id, date, kind)
                    VALUES (?, ?, ?)""",
-                (session_id, user_id, kind),
+                (user_id, date, kind),
             )
             await db.commit()
         except aiosqlite.IntegrityError:
-            # Уже отправлено — молча игнорируем
             pass
