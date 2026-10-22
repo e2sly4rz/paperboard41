@@ -44,8 +44,8 @@ def _build_group_message(kind: str, date: str, location: str,
     icon = "📅" if kind == "day_before" else "⏰"
 
     lines = [
-        f"{icon} <b>Напоминание: игра {when}</b>",
-        f"📅 {_fmt_date(date)} • {location}",
+        f"{icon} <b>Напоминание: {when} игротека</b>",
+        f"{_fmt_date(date)} • {location}",
         "",
         "<b>Вы записаны на:</b>",
     ]
