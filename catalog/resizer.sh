@@ -19,9 +19,9 @@ while IFS= read -r -d '' f; do
   name="${base%.*}"          # отрезаем любое расширение
 
   if magick "$f" \
-      -resize 100x100^ \
+      -resize 200x200^ \
       -gravity center \
-      -extent 100x100 \
+      -extent 200x200 \
       -strip \
       -quality 82 \
       "$DST/${name}.webp" 2>/dev/null; then
