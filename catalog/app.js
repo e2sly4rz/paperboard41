@@ -266,13 +266,29 @@
           ? `<ul>${game.expansions.map(e => `<li>${esc(e)}</li>`).join("")}</ul>`
           : `<div class="no-exp">Дополнений нет в наличии</div>`;
 
+        // Крупная обложка в панели — только если есть bggId и файл
+        const bigCover = game.bggId
+          ? `<img class="cover-large"
+                  src="covers_webp/${game.bggId}.webp"
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  width="120" height="120"
+                  onerror="this.style.display='none';this.parentElement.classList.add('no-cover');">`
+          : "";
+
         panel = `
           <tr class="expansion-row" data-exp-for="${esc(game.name)}">
             <td colspan="7">
               <div class="expansion-content ${isOpen ? "open" : ""}" id="exp-${i}">
-                ${descHtml}
-                <strong>Дополнения:</strong><br>
-                ${expHtml}
+                <div class="expansion-body ${bigCover ? "has-cover" : "no-cover"}">
+                  ${bigCover}
+                  <div class="expansion-text">
+                    ${descHtml}
+                    <strong>Дополнения:</strong><br>
+                    ${expHtml}
+                  </div>
+                </div>
               </div>
             </td>
           </tr>`;
