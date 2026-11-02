@@ -201,7 +201,6 @@
 
     const filtered = GAMES.filter(game => {
       if (q) {
-        // Жанр из поиска убран: ищем только по названию и дополнениям
         const haystack = [
           game.name,
           ...(game.expansions || [])
@@ -246,6 +245,18 @@
                      aria-label="BoardGameGeek: ${esc(game.name)}"
                      data-bgg>🎲</a>`;
 
+      // Обложка: covers_webp/{bggId}.webp, иначе — заглушка с первой буквой
+      const coverHtml = game.bggId
+        ? `<img class="cover-img"
+                src="covers_webp/${game.bggId}.webp"
+                alt=""
+                loading="lazy"
+                decoding="async"
+                width="32" height="32"
+                onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+           <span class="cover-fallback" style="display:none" aria-hidden="true">${esc(game.name[0])}</span>`
+        : `<span class="cover-fallback" aria-hidden="true">${esc(game.name[0])}</span>`;
+
       let panel = "";
       if (hasData) {
         const descHtml = hasDesc
@@ -278,12 +289,7 @@
             ${rowAttrs}>
           <td class="col-num">${i + 1}</td>
           <td class="col-name">
-            <span class="cover-wrap">
-              ${game.cover
-                ? `<img class="cover-img" src="${esc(game.cover)}" alt="" loading="lazy" width="32" height="32" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
-                   <span class="cover-fallback" style="display:none" aria-hidden="true">${esc(game.name[0])}</span>`
-                : `<span class="cover-fallback" aria-hidden="true">${esc(game.name[0])}</span>`}
-            </span>
+            <span class="cover-wrap">${coverHtml}</span>
             ${esc(game.name)}${bgg}
           </td>
           <td class="col-scale">${makeScale(game.difficulty)}</td>

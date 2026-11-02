@@ -4,17 +4,20 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5">
   <title>Картонный Экспресс | Каталог игр</title>
+
+  <!-- Тема применяется до первой отрисовки, чтобы не было мигания -->
   <script>
-  (function () {
-    try {
-      var saved = localStorage.getItem("theme");
-      var theme = saved || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-      document.documentElement.dataset.theme = theme;
-    } catch (e) {
-      document.documentElement.dataset.theme = "light";
-    }
-  })();
-</script>
+    (function () {
+      try {
+        var saved = localStorage.getItem("theme");
+        var theme = saved || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        document.documentElement.dataset.theme = theme;
+      } catch (e) {
+        document.documentElement.dataset.theme = "light";
+      }
+    })();
+  </script>
+
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -33,7 +36,7 @@
     <form class="controls" id="filters" role="search" aria-label="Фильтры каталога">
       <div class="control">
         <label for="search">Поиск:</label>
-        <input type="search" id="search" placeholder="название…" autocomplete="off">
+        <input type="search" id="search" placeholder="название или дополнение…" autocomplete="off">
       </div>
 
       <div class="control">
