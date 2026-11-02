@@ -674,7 +674,7 @@ window.GAMES = [
     "special": false,
     "expansions": [],
     "description": "",
-    "bggID": 258309
+    "bggId": 258309
   },
   {
     "name": "Пикси",
