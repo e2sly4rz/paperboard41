@@ -36,11 +36,6 @@
       : { min: Math.min(...n), max: Math.max(...n) };
   };
 
-  const bggUrl = (game) => {
-    if (game.bggId) return `https://boardgamegeek.com/boardgame/${game.bggId}`;
-    return `https://www.google.com/search?q=${encodeURIComponent('site:boardgamegeek.com ' + game.name)}`;
-  };
-
   // === Переключатель темы ===
   (function initThemeToggle() {
     const btn = document.getElementById("theme-toggle");
@@ -238,14 +233,7 @@
 
       const isOpen = game.name === openName;
 
-      const bgg = `<a class="bgg-link"
-                     href="${bggUrl(game)}"
-                     target="_blank" rel="noopener noreferrer"
-                     title="Открыть на BoardGameGeek"
-                     aria-label="BoardGameGeek: ${esc(game.name)}"
-                     data-bgg>🎲</a>`;
-
-      // Обложка: covers_webp/{bggId}.webp, иначе — заглушка с первой буквой
+      // Миниатюра обложки в строке
       const coverHtml = game.bggId
         ? `<img class="cover-img"
                 src="covers_webp/${game.bggId}.webp"
@@ -266,7 +254,7 @@
           ? `<ul>${game.expansions.map(e => `<li>${esc(e)}</li>`).join("")}</ul>`
           : `<div class="no-exp">Дополнений нет в наличии</div>`;
 
-        // Крупная обложка в панели — только если есть bggId и файл
+        // Крупная обложка в панели
         const bigCover = game.bggId
           ? `<img class="cover-large"
                   src="covers_webp/${game.bggId}.webp"
@@ -275,6 +263,17 @@
                   decoding="async"
                   width="120" height="120"
                   onerror="this.style.display='none';this.parentElement.classList.add('no-cover');">`
+          : "";
+
+        // Ссылка на BGG — только если есть bggId
+        const bggLink = game.bggId
+          ? `<a class="bgg-link"
+                href="https://boardgamegeek.com/boardgame/${game.bggId}"
+                target="_blank" rel="noopener noreferrer"
+                title="Открыть на BoardGameGeek"
+                aria-label="BoardGameGeek: ${esc(game.name)}">
+               🎲 BoardGameGeek
+             </a>`
           : "";
 
         panel = `
@@ -287,6 +286,7 @@
                     ${descHtml}
                     <strong>Дополнения:</strong><br>
                     ${expHtml}
+                    ${bggLink ? `<div class="bgg-row">${bggLink}</div>` : ""}
                   </div>
                 </div>
               </div>
@@ -306,7 +306,7 @@
           <td class="col-num">${i + 1}</td>
           <td class="col-name">
             <span class="cover-wrap">${coverHtml}</span>
-            ${esc(game.name)}${bgg}
+            ${esc(game.name)}
           </td>
           <td class="col-scale">${makeScale(game.difficulty)}</td>
           <td class="col-players">${players}</td>
@@ -387,14 +387,16 @@
   }
 
   tbody.addEventListener("click", (e) => {
-    if (e.target.closest("[data-bgg]")) return;
+    // Клик по ссылке BGG в панели не должен закрывать/открывать строку
+    if (e.target.closest(".bgg-link")) return;
+
     const row = e.target.closest(".game-row");
     if (row) toggleRow(row);
   });
 
   tbody.addEventListener("keydown", (e) => {
     if (e.key !== "Enter" && e.key !== " ") return;
-    if (e.target.closest("[data-bgg]")) return;
+    if (e.target.closest(".bgg-link")) return;
     const row = e.target.closest(".game-row");
     if (!row) return;
     e.preventDefault();

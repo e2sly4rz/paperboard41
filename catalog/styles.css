@@ -277,29 +277,6 @@ h2 {
   color: var(--ink);
 }
 
-/* === Иконка BGG === */
-.bgg-link {
-  display: inline-block;
-  margin-left: 6px;
-  font-size: 13px;
-  text-decoration: none;
-  color: var(--ink-muted);
-  opacity: .6;
-  transition: opacity .15s ease, color .15s ease;
-  vertical-align: baseline;
-}
-.bgg-link:hover,
-.bgg-link:focus-visible {
-  opacity: 1;
-  color: var(--bgg-hover);
-  outline: none;
-}
-.bgg-link:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-  border-radius: 2px;
-}
-
 /* === Обложки игр (миниатюра в строке) === */
 .cover-wrap {
   display: inline-flex;
@@ -354,7 +331,7 @@ h2 {
   color: var(--ink-soft);
 }
 .expansion-content.open {
-  max-height: 1200px;            /* с обложкой панель выше */
+  max-height: 1200px;
   padding: 8px 20px 12px;
 }
 
@@ -387,7 +364,7 @@ h2 {
 }
 
 .expansion-text {
-  min-width: 0;                  /* не даём длинным словам распирать grid */
+  min-width: 0;
 }
 
 .expansion-desc {
@@ -420,6 +397,36 @@ h2 {
 .expansion-content .no-exp {
   font-style: italic;
   color: var(--ink-muted);
+}
+
+/* === Ссылка на BGG (в раскрытой панели) === */
+.bgg-row {
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+}
+
+.bgg-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 13px;
+  text-decoration: none;
+  color: var(--ink-muted);
+  padding: 2px 6px;
+  border-radius: 3px;
+  transition: color .15s ease, background-color .15s ease;
+}
+.bgg-link:hover,
+.bgg-link:focus-visible {
+  color: var(--bgg-hover);
+  background: var(--paper);
+  outline: none;
+}
+.bgg-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 /* === «Ничего не найдено» === */
@@ -458,7 +465,6 @@ h2 {
   h2 { font-size: 18px; letter-spacing: .5px; }
   .legend { font-size: 12px; line-height: 1.5; }
 
-  /* Кнопка темы — статично, по центру под заголовком */
   .theme-toggle {
     position: static;
     margin: 0 auto 12px;
@@ -466,17 +472,14 @@ h2 {
   }
   .theme-toggle .theme-icon { font-size: 18px; }
 
-  /* Фильтры — вертикально */
   .controls { flex-direction: column; align-items: stretch; gap: 10px; }
   .control label { font-size: 12px; }
   .controls input[type="search"],
   .controls select { width: 100%; font-size: 15px; padding: 8px 10px; }
   .reset-btn { width: 100%; padding: 10px; }
 
-  /* Прячем шапку таблицы */
   .catalog-table thead { display: none; }
 
-  /* Таблица → карточки */
   .catalog-table,
   .catalog-table tbody,
   .catalog-table tr,
@@ -548,13 +551,6 @@ h2 {
     background: var(--paper-dark);
   }
 
-  .bgg-link {
-    font-size: 15px;
-    opacity: .8;
-    margin-left: 8px;
-  }
-
-  /* Обложки на мобиле: чуть меньше, выровнены с названием */
   .cover-wrap {
     width: 28px;
     height: 28px;
@@ -564,7 +560,6 @@ h2 {
     font-size: 12px;
   }
 
-  /* Крупная обложка в панели на мобиле */
   .expansion-body {
     grid-template-columns: 80px 1fr;
     gap: 10px;
@@ -577,6 +572,8 @@ h2 {
   .expansion-body.no-cover {
     grid-template-columns: 1fr;
   }
+
+  .bgg-link { font-size: 14px; }
 }
 
 /* Очень узкие экраны: скрываем крупную обложку, чтобы текст не сжимался */
