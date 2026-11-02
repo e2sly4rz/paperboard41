@@ -1,4 +1,5 @@
 :root {
+  /* Светлая тема (по умолчанию) */
   --paper:      #f5e6b3;
   --paper-dark: #efe2b5;
   --border:     #d4c39a;
@@ -7,7 +8,26 @@
   --ink-soft:   #444;
   --ink-muted:  #666;
   --accent:     #b8a878;
+  --accent-hover: #a89468;
   --row-hover:  #ede0b0;
+  --bg-page:    #f4f1ea;
+  --perforation: #cfa07a;
+  --bgg-hover:  #b35a00;
+}
+
+[data-theme="dark"] {
+  --paper:      #2a2620;
+  --paper-dark: #241f1a;
+  --border:     #4a4238;
+  --ink:        #e8e0c8;
+  --ink-soft:   #c8bfa8;
+  --ink-muted:  #9a9080;
+  --accent:     #8a7a5a;
+  --accent-hover: #9d8c6a;
+  --row-hover:  #363028;
+  --bg-page:    #1a1712;
+  --perforation: #5a4a3a;
+  --bgg-hover:  #e8a05a;
 }
 
 * { box-sizing: border-box; }
@@ -15,8 +35,9 @@
 body {
   margin: 0;
   padding: 40px 20px;
-  background: #f4f1ea;
+  background: var(--bg-page);
   font-family: sans-serif;
+  transition: background-color .2s ease;
 }
 
 .print-sheet {
@@ -30,16 +51,16 @@ body {
   padding: 28px 36px;
   box-shadow: 0 20px 50px rgba(0,0,0,.2);
   position: relative;
+  transition: background-color .2s ease, border-color .2s ease;
 }
 
-/* Перфорация — привязана к толщине рамки через переменную */
 .print-sheet::before,
 .print-sheet::after {
   content: "";
   position: absolute;
   top: 0; bottom: 0;
   width: 8px;
-  background-image: radial-gradient(circle at center, transparent 4px, #cfa07a 4.5px);
+  background-image: radial-gradient(circle at center, transparent 4px, var(--perforation) 4.5px);
   background-size: 16px 16px;
   pointer-events: none;
 }
@@ -48,11 +69,12 @@ body {
 
 h2 {
   text-align: center;
-  color: #222;
+  color: var(--ink);
   font-family: "Courier New", Courier, monospace;
   letter-spacing: 1px;
   margin-top: 0;
   text-transform: uppercase;
+  transition: color .2s ease;
 }
 
 .legend {
@@ -61,9 +83,37 @@ h2 {
   color: var(--ink-soft);
   font-size: 14px;
   margin-bottom: 16px;
-  border-bottom: 1px dashed #ccc;
+  border-bottom: 1px dashed var(--border);
   padding-bottom: 8px;
 }
+
+/* === Переключатель темы === */
+.theme-toggle {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  line-height: 1;
+  background: var(--paper-dark);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: background .15s ease, transform .15s ease;
+  z-index: 10;
+}
+.theme-toggle:hover  { background: var(--row-hover); }
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.theme-toggle:active { transform: scale(0.95); }
+.theme-icon { display: inline-block; }
 
 /* === Фильтры === */
 .controls {
@@ -74,7 +124,7 @@ h2 {
   margin-bottom: 16px;
   font-family: "Courier New", Courier, monospace;
   font-size: 14px;
-  color: #333;
+  color: var(--ink-soft);
 }
 .control { display: flex; flex-direction: column; gap: 4px; }
 .control label { font-weight: bold; }
@@ -82,11 +132,12 @@ h2 {
 .controls select {
   font-family: inherit;
   font-size: 14px;
-  background: #fffaeb;
-  border: 1px solid #c4b380;
+  background: var(--paper-dark);
+  border: 1px solid var(--border);
   padding: 4px 8px;
-  color: #222;
+  color: var(--ink);
   min-width: 140px;
+  transition: background-color .2s ease, border-color .2s ease, color .2s ease;
 }
 .controls select { cursor: pointer; }
 
@@ -95,24 +146,25 @@ h2 {
   font-size: 14px;
   padding: 6px 12px;
   background: var(--accent);
-  border: 1px solid #a89468;
+  border: 1px solid var(--accent-hover);
   color: #fff;
   cursor: pointer;
   border-radius: 3px;
+  transition: background .15s ease;
 }
-.reset-btn:hover { background: #a89468; }
+.reset-btn:hover { background: var(--accent-hover); }
 
 .count {
   font-family: "Courier New", Courier, monospace;
   font-size: 13px;
-  color: #555;
+  color: var(--ink-muted);
   margin-bottom: 10px;
 }
 
 /* === Таблица === */
 .table-wrap {
   position: relative;
-  overflow-x: auto;              /* скролл только если реально не влезает */
+  overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
 
@@ -122,13 +174,14 @@ h2 {
   font-family: "Courier New", Courier, monospace;
   font-size: 14px;
   color: var(--ink);
-  table-layout: auto;            /* ширины по содержимому */
+  table-layout: auto;
+  transition: color .2s ease;
 }
 .catalog-table th {
   text-align: left;
   padding: 8px 10px;
   border-bottom: 2px solid var(--accent);
-  color: #333;
+  color: var(--ink-soft);
   white-space: nowrap;
   font-size: 13px;
   letter-spacing: 1px;
@@ -136,7 +189,7 @@ h2 {
 }
 .catalog-table td {
   padding: 5px 10px;
-  border-bottom: 1px dashed #c9bb88;
+  border-bottom: 1px dashed var(--border);
   vertical-align: middle;
   overflow: visible;
 }
@@ -157,7 +210,6 @@ h2 {
   word-break: normal;
 }
 
-/* Выравнивание */
 .col-num     { text-align: left; }
 .col-scale   { font-size: 15px; letter-spacing: 1px; }
 .col-players { text-align: left; }
@@ -165,7 +217,7 @@ h2 {
 .col-genre   { text-align: left; }
 .col-access  { text-align: center; }
 
-/* Строка-игра: интерактивна */
+/* === Строка-игра === */
 .game-row {
   cursor: pointer;
   outline: none;
@@ -173,13 +225,79 @@ h2 {
 .game-row:hover td,
 .game-row:focus-visible td { background: var(--row-hover); }
 .game-row.is-open td       { background: var(--row-hover); }
-
-/* Акцентная полоска у открытой строки (вместо стрелочки) */
 .game-row.is-open td:first-child {
   box-shadow: inset 3px 0 0 var(--accent);
 }
 .game-row:hover td:first-child {
-  box-shadow: inset 3px 0 0 #d9c79a;
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+/* === Сортируемые заголовки === */
+.catalog-table th.sortable {
+  padding: 0;
+  cursor: pointer;
+  user-select: none;
+}
+.catalog-table th.sortable .sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+  text-align: inherit;
+}
+.catalog-table th.sortable:hover .sort-btn {
+  color: var(--ink);
+}
+.catalog-table th.sortable:focus-visible .sort-btn {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.sort-arrow {
+  display: inline-block;
+  width: 0.7em;
+  font-size: 11px;
+  color: var(--ink-muted);
+  opacity: 0;
+  transition: opacity .15s ease;
+}
+.catalog-table th[aria-sort="ascending"]  .sort-arrow,
+.catalog-table th[aria-sort="descending"] .sort-arrow { opacity: 1; }
+.catalog-table th[aria-sort="ascending"]  .sort-arrow::before { content: "▲"; }
+.catalog-table th[aria-sort="descending"] .sort-arrow::before { content: "▼"; }
+.catalog-table th[aria-sort="ascending"],
+.catalog-table th[aria-sort="descending"] {
+  color: var(--ink);
+}
+
+/* === Иконка BGG === */
+.bgg-link {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 13px;
+  text-decoration: none;
+  color: var(--ink-muted);
+  opacity: .6;
+  transition: opacity .15s ease, color .15s ease;
+  vertical-align: baseline;
+}
+.bgg-link:hover,
+.bgg-link:focus-visible {
+  opacity: 1;
+  color: var(--bgg-hover);
+  outline: none;
+}
+.bgg-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 /* === Панель дополнений === */
@@ -187,7 +305,7 @@ h2 {
   padding: 0 !important;
   border: none !important;
   background: var(--paper-dark) !important;
-  width: auto !important;          /* перебиваем правило для коротких колонок */
+  width: auto !important;
   white-space: normal !important;
 }
 .expansion-content {
@@ -197,7 +315,7 @@ h2 {
   padding: 0 20px;
   font-family: "Courier New", Courier, monospace;
   font-size: 13px;
-  color: #333;
+  color: var(--ink-soft);
 }
 .expansion-content.open {
   max-height: 800px;
@@ -216,7 +334,7 @@ h2 {
   hyphens: auto;
   -webkit-hyphens: auto;
 }
-.expansion-desc strong { color: #333; }
+.expansion-desc strong { color: var(--ink); }
 
 .expansion-content ul { margin: 0; padding: 0; list-style: none; }
 .expansion-content li {
@@ -235,7 +353,7 @@ h2 {
   color: var(--ink-muted);
 }
 
-/* «Ничего не найдено» */
+/* === «Ничего не найдено» === */
 .empty {
   padding: 32px 16px;
   text-align: center;
@@ -262,6 +380,14 @@ h2 {
   h2 { font-size: 18px; letter-spacing: .5px; }
   .legend { font-size: 12px; line-height: 1.5; }
 
+  /* Кнопка темы — статично, по центру под заголовком */
+  .theme-toggle {
+    position: static;
+    margin: 0 auto 12px;
+    display: flex;
+  }
+  .theme-toggle .theme-icon { font-size: 18px; }
+
   /* Фильтры — вертикально */
   .controls { flex-direction: column; align-items: stretch; gap: 10px; }
   .control label { font-size: 12px; }
@@ -280,7 +406,7 @@ h2 {
 
   .catalog-table tr.game-row {
     position: relative;
-    border: 1px solid #c9bb88;
+    border: 1px solid var(--border);
     border-radius: 6px;
     margin-bottom: 8px;
     padding: 10px 12px;
@@ -298,7 +424,7 @@ h2 {
     display: inline-block;
     width: auto !important;
     font-weight: bold;
-    color: #777;
+    color: var(--ink-muted);
     font-size: 12px;
   }
   .catalog-table tr.game-row td.col-access {
@@ -315,7 +441,6 @@ h2 {
     overflow-wrap: anywhere;
   }
 
-  /* Метки для строк-характеристик */
   .catalog-table tr.game-row td.col-scale::before   { content: "Сложность: "; font-weight: bold; font-size: 12px; }
   .catalog-table tr.game-row td.col-players::before { content: "Игроки: ";     font-weight: bold; font-size: 12px; }
   .catalog-table tr.game-row td.col-time::before    { content: "Время: ";      font-weight: bold; font-size: 12px; }
@@ -326,100 +451,25 @@ h2 {
   .catalog-table tr.game-row td.col-time,
   .catalog-table tr.game-row td.col-genre   { font-size: 13px; }
 
-  /* Панель дополнений — как продолжение карточки */
   .expansion-row td { display: block !important; }
   .expansion-row .expansion-content { padding: 0 12px; }
   .expansion-row .expansion-content.open { padding: 8px 12px 10px; }
   .expansion-desc { font-size: 13px; margin-bottom: 8px; }
   .expansion-content li { font-size: 13px; }
 
-  /* Визуальная связка карточки и панели */
   .catalog-table tr.game-row.is-open {
     border-bottom-left-radius: 0;
     border-bottom-right-radius: 0;
     margin-bottom: 0;
   }
   .catalog-table tr.expansion-row {
-    border: 1px solid #c9bb88;
+    border: 1px solid var(--border);
     border-top: none;
     border-radius: 0 0 6px 6px;
     margin-bottom: 8px;
     background: var(--paper-dark);
   }
-}
 
-/* === Сортируемые заголовки === */
-.catalog-table th.sortable {
-  padding: 0;                     /* padding переезжает на кнопку */
-  cursor: pointer;
-  user-select: none;
-}
-.catalog-table th.sortable .sort-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  width: 100%;
-  padding: 8px 10px;
-  background: none;
-  border: none;
-  font: inherit;
-  color: inherit;
-  letter-spacing: inherit;
-  text-transform: inherit;
-  cursor: pointer;
-  text-align: inherit;
-}
-.catalog-table th.sortable:hover .sort-btn {
-  color: #000;
-}
-.catalog-table th.sortable:focus-visible .sort-btn {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
-.sort-arrow {
-  display: inline-block;
-  width: 0.7em;
-  font-size: 11px;
-  color: var(--ink-muted);
-  opacity: 0;
-  transition: opacity .15s ease;
-}
-.catalog-table th[aria-sort="ascending"]  .sort-arrow { opacity: 1; }
-.catalog-table th[aria-sort="descending"] .sort-arrow { opacity: 1; }
-.catalog-table th[aria-sort="ascending"]  .sort-arrow::before { content: "▲"; }
-.catalog-table th[aria-sort="descending"] .sort-arrow::before { content: "▼"; }
-
-/* Активный столбец — чуть темнее */
-.catalog-table th[aria-sort="ascending"],
-.catalog-table th[aria-sort="descending"] {
-  color: #000;
-}
-
-/* === Иконка BGG в строке === */
-.bgg-link {
-  display: inline-block;
-  margin-left: 6px;
-  font-size: 13px;
-  text-decoration: none;
-  color: var(--ink-muted);
-  opacity: .6;
-  transition: opacity .15s ease, color .15s ease;
-  vertical-align: baseline;
-}
-.bgg-link:hover,
-.bgg-link:focus-visible {
-  opacity: 1;
-  color: #b35a00;        /* фирменный оранжевый BGG */
-  outline: none;
-}
-.bgg-link:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-  border-radius: 2px;
-}
-
-/* На мобиле — иконка чуть крупнее и всегда видима */
-@media (max-width: 640px) {
   .bgg-link {
     font-size: 15px;
     opacity: .8;
@@ -429,5 +479,12 @@ h2 {
 
 /* Уважаем prefers-reduced-motion */
 @media (prefers-reduced-motion: reduce) {
-  .expansion-content { transition: none; }
+  .expansion-content,
+  .theme-toggle,
+  body,
+  .print-sheet,
+  .catalog-table,
+  .controls input,
+  .controls select,
+  h2 { transition: none; }
 }

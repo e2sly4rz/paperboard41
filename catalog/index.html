@@ -4,11 +4,26 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5">
   <title>Картонный Экспресс | Каталог игр</title>
+  <script>
+  (function () {
+    try {
+      var saved = localStorage.getItem("theme");
+      var theme = saved || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      document.documentElement.dataset.theme = theme;
+    } catch (e) {
+      document.documentElement.dataset.theme = "light";
+    }
+  })();
+</script>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <main class="print-sheet">
     <h2>Картонный Экспресс | Каталог игр</h2>
+    
+    <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Переключить тему" title="Переключить тему">
+      <span class="theme-icon" aria-hidden="true">🌙</span>
+    </button>
 
     <p class="legend">
       Шкала сложности: █ — 0.5 балла. 1 балл = █░░░░░░░░, 5 баллов = █████████
@@ -18,7 +33,7 @@
     <form class="controls" id="filters" role="search" aria-label="Фильтры каталога">
       <div class="control">
         <label for="search">Поиск:</label>
-        <input type="search" id="search" placeholder="название, жанр, дополнение…" autocomplete="off">
+        <input type="search" id="search" placeholder="название или дополнение…" autocomplete="off">
       </div>
 
       <div class="control">

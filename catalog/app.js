@@ -26,7 +26,6 @@
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 
-  // Парсим «30-45 мин» / «30 мин» / «120-240 мин» в числа
   const parseTime = (s) => {
     if (!s) return { min: 0, max: 0 };
     const nums = String(s).match(/\d+/g);
@@ -37,15 +36,44 @@
       : { min: Math.min(...n), max: Math.max(...n) };
   };
 
-  // Ссылка на BGG: по id
   const bggUrl = (game) => {
-    // 1) Прямая ссылка на игру, если есть bggId — самый надёжный вариант
-    if (game.bggId) {
-      return `https://boardgamegeek.com/boardgame/${game.bggId}`;
-    }
-    // 2) Иначе — поиск через Google по сайту BGG (обход Cloudflare-блокировки поиска)
+    if (game.bggId) return `https://boardgamegeek.com/boardgame/${game.bggId}`;
     return `https://www.google.com/search?q=${encodeURIComponent('site:boardgamegeek.com ' + game.name)}`;
   };
+
+  // === Переключатель темы ===
+  (function initThemeToggle() {
+    const btn = document.getElementById("theme-toggle");
+    if (!btn) return;
+
+    const root = document.documentElement;
+    const icon = btn.querySelector(".theme-icon");
+
+    const apply = (theme) => {
+      root.dataset.theme = theme;
+      try { localStorage.setItem("theme", theme); } catch (e) {}
+      if (icon) icon.textContent = theme === "dark" ? "☀️" : "🌙";
+      btn.setAttribute("aria-label",
+        theme === "dark" ? "Включить светлую тему" : "Включить тёмную тему");
+    };
+
+    const current = root.dataset.theme || "light";
+    if (icon) icon.textContent = current === "dark" ? "☀️" : "🌙";
+    btn.setAttribute("aria-label",
+      current === "dark" ? "Включить светлую тему" : "Включить тёмную тему");
+
+    btn.addEventListener("click", () => {
+      const next = root.dataset.theme === "dark" ? "light" : "dark";
+      apply(next);
+    });
+
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    mq.addEventListener?.("change", (e) => {
+      let saved = null;
+      try { saved = localStorage.getItem("theme"); } catch (err) {}
+      if (!saved) apply(e.matches ? "dark" : "light");
+    });
+  })();
 
   // === DOM ===
   const tbody        = $("#tbody");
@@ -72,8 +100,8 @@
 
   // === Состояние ===
   let openName = null;
-  let sortKey  = "name";        // name | num | difficulty | players | time | genre | access
-  let sortDir  = "asc";         // asc | desc
+  let sortKey  = "name";
+  let sortDir  = "asc";
 
   // === URL ⇄ состояние ===
   const SORT_KEYS = ["name", "num", "difficulty", "players", "time", "genre", "access"];
@@ -93,7 +121,6 @@
       if (d === "asc" || d === "desc") sortDir = d;
     }
 
-    // Открытая строка
     openName = params.get("open") || null;
   }
 
@@ -118,20 +145,13 @@
   function sortGames(list) {
     const dir = sortDir === "asc" ? 1 : -1;
 
-    // Стабильный компаратор с fallback на имя
     const cmp = (a, b) => {
       let va, vb;
       switch (sortKey) {
-        case "num":
-          // «№» — это позиция в исходном массиве, но у нас после фильтра.
-          // Сортируем по имени как запасной вариант, если num.
-          va = a.name; vb = b.name;
-          break;
         case "difficulty":
           va = a.difficulty; vb = b.difficulty;
           break;
         case "players":
-          // Сначала по min, потом по max
           va = a.minPlayers * 1000 + a.maxPlayers;
           vb = b.minPlayers * 1000 + b.maxPlayers;
           break;
@@ -142,25 +162,22 @@
           break;
         }
         case "genre":
-          va = a.genre || "\uffff"; // пустые в конец
+          va = a.genre || "\uffff";
           vb = b.genre || "\uffff";
           break;
         case "access":
-          // 🔒 сначала при asc
           va = a.special ? 0 : 1;
           vb = b.special ? 0 : 1;
           break;
         case "name":
+        case "num":
         default:
           va = a.name; vb = b.name;
       }
 
       let r;
-      if (typeof va === "string") {
-        r = va.localeCompare(vb, "ru");
-      } else {
-        r = va - vb;
-      }
+      if (typeof va === "string") r = va.localeCompare(vb, "ru");
+      else r = va - vb;
       if (r === 0) r = a.name.localeCompare(b.name, "ru");
       return r * dir;
     };
@@ -184,9 +201,9 @@
 
     const filtered = GAMES.filter(game => {
       if (q) {
+        // Жанр из поиска убран: ищем только по названию и дополнениям
         const haystack = [
           game.name,
-          game.genre,
           ...(game.expansions || [])
         ].join(" ").toLowerCase();
         if (!haystack.includes(q)) return false;
@@ -222,7 +239,6 @@
 
       const isOpen = game.name === openName;
 
-      // Иконка BGG рядом с названием
       const bgg = `<a class="bgg-link"
                      href="${bggUrl(game)}"
                      target="_blank" rel="noopener noreferrer"
@@ -278,15 +294,13 @@
     writeStateToURL();
   }
 
-  // === Индикаторы сортировки ===
   function updateSortIndicators() {
     $$(".catalog-table th.sortable").forEach(th => {
       const key = th.dataset.sort;
-      if (key === sortKey) {
-        th.setAttribute("aria-sort", sortDir === "asc" ? "ascending" : "descending");
-      } else {
-        th.setAttribute("aria-sort", "none");
-      }
+      th.setAttribute(
+        "aria-sort",
+        key === sortKey ? (sortDir === "asc" ? "ascending" : "descending") : "none"
+      );
     });
   }
 
@@ -300,8 +314,6 @@
       sortDir = sortDir === "asc" ? "desc" : "asc";
     } else {
       sortKey = key;
-      // Для сложности/времени/игроков asc = от меньшего, это логично.
-      // Для доступа asc = сначала 🔒.
       sortDir = "asc";
     }
     render();
@@ -345,9 +357,7 @@
   }
 
   tbody.addEventListener("click", (e) => {
-    // Клик по иконке BGG — не раскрываем строку
     if (e.target.closest("[data-bgg]")) return;
-
     const row = e.target.closest(".game-row");
     if (row) toggleRow(row);
   });
