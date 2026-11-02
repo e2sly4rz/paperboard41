@@ -651,7 +651,8 @@ window.GAMES = [
     "expansions": [
       "Остров сокровищ: Месть Джона Сильвера"
     ],
-    "description": ""
+    "description": "",
+    "bggId": 242639
   },
   {
     "name": "Отвечает Александр Гусь",
