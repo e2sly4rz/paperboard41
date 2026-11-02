@@ -305,8 +305,10 @@
             ${rowAttrs}>
           <td class="col-num">${i + 1}</td>
           <td class="col-name">
-            <span class="cover-wrap">${coverHtml}</span>
-            ${esc(game.name)}
+            <div class="name-flex">
+              <span class="cover-wrap">${coverHtml}</span>
+              <span class="name-text">${esc(game.name)}</span
+            </div>
           </td>
           <td class="col-scale">${makeScale(game.difficulty)}</td>
           <td class="col-players">${players}</td>

@@ -206,8 +206,21 @@ h2 {
 .catalog-table th.col-name {
   width: auto;
   white-space: normal;
+}
+
+/* Flex-раскладка: обложка + текст в своей колонке */
+.name-flex {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.name-text {
+  flex: 1 1 auto;
+  min-width: 0;              /* не даём flex распирать длинным словом */
   overflow-wrap: anywhere;
   word-break: normal;
+  line-height: 1.35;
 }
 
 .col-num     { text-align: left; }
@@ -284,7 +297,6 @@ h2 {
   justify-content: center;
   width: 32px;
   height: 32px;
-  margin-right: 8px;
   border-radius: 4px;
   overflow: hidden;
   background: var(--paper-dark);
@@ -519,7 +531,6 @@ h2 {
     font-weight: bold;
     font-size: 15px;
     margin: 2px 0 4px;
-    overflow-wrap: anywhere;
   }
 
   .catalog-table tr.game-row td.col-scale::before   { content: "Сложность: "; font-weight: bold; font-size: 12px; }
@@ -554,8 +565,12 @@ h2 {
   .cover-wrap {
     width: 28px;
     height: 28px;
-    margin-right: 6px;
   }
+
+  .name-flex {
+    gap: 6px;
+  }
+
   .cover-fallback {
     font-size: 12px;
   }
