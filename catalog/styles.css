@@ -110,7 +110,11 @@ h2 {
 }
 
 /* === Таблица === */
-.table-wrap { position: relative; }
+.table-wrap {
+  position: relative;
+  overflow-x: auto;              /* скролл только если реально не влезает */
+  -webkit-overflow-scrolling: touch;
+}
 
 .catalog-table {
   width: 100%;
@@ -118,7 +122,7 @@ h2 {
   font-family: "Courier New", Courier, monospace;
   font-size: 14px;
   color: var(--ink);
-  table-layout: fixed;
+  table-layout: auto;            /* ширины по содержимому */
 }
 .catalog-table th {
   text-align: left;
@@ -134,24 +138,32 @@ h2 {
   padding: 5px 10px;
   border-bottom: 1px dashed #c9bb88;
   vertical-align: middle;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: visible;
 }
 
-.col-num     { width: 30px; text-align: left; }
-.catalog-table td.col-name {
+/* Все колонки, КРОМЕ названия: одна строка, ширина по содержимому */
+.catalog-table td:not(.col-name),
+.catalog-table th:not(.col-name) {
+  white-space: nowrap;
+  width: 1%;
+}
+
+/* Название: забирает всё оставшееся место и переносится */
+.catalog-table td.col-name,
+.catalog-table th.col-name {
   width: auto;
   white-space: normal;
   overflow-wrap: anywhere;
-  overflow: visible;
-  text-overflow: clip;
+  word-break: normal;
 }
-.col-scale   { width: 120px; font-size: 15px; letter-spacing: 1px; }
-.col-players { width: 70px; text-align: left; }
-.col-time    { width: 100px; }
-.col-genre   { width: 110px; }
-.col-access  { width: 50px; text-align: center; }
+
+/* Выравнивание */
+.col-num     { text-align: left; }
+.col-scale   { font-size: 15px; letter-spacing: 1px; }
+.col-players { text-align: left; }
+.col-time    { text-align: left; }
+.col-genre   { text-align: left; }
+.col-access  { text-align: center; }
 
 /* Строка-игра: интерактивна */
 .game-row {
@@ -162,21 +174,21 @@ h2 {
 .game-row:focus-visible td { background: var(--row-hover); }
 .game-row.is-open td       { background: var(--row-hover); }
 
-/* Индикатор раскрытия в последней ячейке */
-.game-row .col-access::after {
-  content: "▸";
-  display: inline-block;
-  margin-left: 6px;
-  color: var(--ink-muted);
-  transition: transform .2s ease;
+/* Акцентная полоска у открытой строки (вместо стрелочки) */
+.game-row.is-open td:first-child {
+  box-shadow: inset 3px 0 0 var(--accent);
 }
-.game-row.is-open .col-access::after { transform: rotate(90deg); }
+.game-row:hover td:first-child {
+  box-shadow: inset 3px 0 0 #d9c79a;
+}
 
 /* === Панель дополнений === */
 .expansion-row td {
   padding: 0 !important;
   border: none !important;
   background: var(--paper-dark) !important;
+  width: auto !important;          /* перебиваем правило для коротких колонок */
+  white-space: normal !important;
 }
 .expansion-content {
   max-height: 0;
@@ -235,6 +247,7 @@ h2 {
 /* ===== Планшеты ===== */
 @media (max-width: 900px) {
   .print-sheet { width: 100%; padding: 24px 20px; }
+  .catalog-table { font-size: 13px; }
 }
 
 /* ===== Смартфоны ===== */
@@ -263,7 +276,7 @@ h2 {
   .catalog-table,
   .catalog-table tbody,
   .catalog-table tr,
-  .catalog-table td { display: block; width: 100%; }
+  .catalog-table td { display: block; width: 100% !important; }
 
   .catalog-table tr.game-row {
     position: relative;
@@ -276,14 +289,14 @@ h2 {
   .catalog-table tr.game-row td {
     border: none;
     padding: 2px 0;
-    white-space: normal;
+    white-space: normal !important;
     overflow: visible;
     text-overflow: clip;
   }
 
   .catalog-table tr.game-row td.col-num {
     display: inline-block;
-    width: auto;
+    width: auto !important;
     font-weight: bold;
     color: #777;
     font-size: 12px;
@@ -292,10 +305,8 @@ h2 {
     position: absolute;
     top: 10px; right: 12px;
     font-size: 16px;
-    width: auto;
+    width: auto !important;
   }
-  /* на мобиле индикатор уже не нужен — карточка и так кликабельна */
-  .catalog-table tr.game-row td.col-access::after { display: none; }
 
   .catalog-table tr.game-row td.col-name {
     font-weight: bold;
@@ -339,6 +350,5 @@ h2 {
 
 /* Уважаем prefers-reduced-motion */
 @media (prefers-reduced-motion: reduce) {
-  .expansion-content,
-  .game-row .col-access::after { transition: none; }
+  .expansion-content { transition: none; }
 }

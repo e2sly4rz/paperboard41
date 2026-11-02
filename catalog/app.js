@@ -40,7 +40,8 @@
   const resetEmpty   = $("#reset-empty");
 
   // === Заполняем жанры (без пустых) ===
-  const genres = [...new Set(GAMES.map(g => g.genre).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ru"));
+  const genres = [...new Set(GAMES.map(g => g.genre).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, "ru"));
   genres.forEach(g => {
     const opt = document.createElement("option");
     opt.value = g;
@@ -54,7 +55,7 @@
   // === Фильтрация ===
   function getFiltered() {
     const q  = searchInput.value.toLowerCase().trim();
-    const d  = diffSelect.value;           // "any" | "1-2" | ...
+    const d  = diffSelect.value;
     const g  = genreSel.value;
     const p  = parseInt(playersSel.value, 10) || 0;
     const a  = accessSel.value;
@@ -97,7 +98,6 @@
   function render() {
     const filtered = getFiltered();
 
-    // Если раскрытая игра отфильтрована — сбрасываем
     if (openName && !filtered.some(g => g.name === openName)) {
       openName = null;
     }
@@ -114,7 +114,6 @@
 
       const isOpen = game.name === openName;
 
-      // Если данных нет — панель не рендерим вовсе
       let panel = "";
       if (hasData) {
         const descHtml = hasDesc
@@ -136,7 +135,6 @@
           </tr>`;
       }
 
-      // tabindex + aria для доступности
       const rowAttrs = hasData
         ? `tabindex="0" role="button" aria-expanded="${isOpen}" aria-controls="exp-${i}"`
         : `aria-disabled="true"`;
@@ -157,21 +155,17 @@
         ${panel}`;
     }).join("");
 
-    // Счётчик и пустое состояние
     countEl.textContent = `Найдено: ${filtered.length} из ${GAMES.length}`;
     emptyEl.hidden = filtered.length !== 0;
   }
 
-  // === Делегирование клика и клавиатуры ===
+  // === Раскрытие/закрытие ===
   function toggleRow(row) {
     const name = row.dataset.name;
     if (!name) return;
-
-    // Нет данных — нечего раскрывать
     if (row.getAttribute("aria-disabled") === "true") return;
 
     if (openName === name) {
-      // закрываем
       openName = null;
       row.classList.remove("is-open");
       row.setAttribute("aria-expanded", "false");
@@ -180,9 +174,8 @@
         panel.querySelector(".expansion-content")?.classList.remove("open");
       }
     } else {
-      // закрываем предыдущую
       if (openName) {
-        const prev = tbody.querySelector(`.game-row.is-open`);
+        const prev = tbody.querySelector(".game-row.is-open");
         if (prev) {
           prev.classList.remove("is-open");
           prev.setAttribute("aria-expanded", "false");
@@ -192,7 +185,6 @@
           }
         }
       }
-      // открываем новую
       openName = name;
       row.classList.add("is-open");
       row.setAttribute("aria-expanded", "true");
