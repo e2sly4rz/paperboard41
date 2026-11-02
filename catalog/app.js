@@ -277,7 +277,15 @@
             data-name="${esc(game.name)}"
             ${rowAttrs}>
           <td class="col-num">${i + 1}</td>
-          <td class="col-name">${esc(game.name)}${bgg}</td>
+          <td class="col-name">
+            <span class="cover-wrap">
+              ${game.cover
+                ? `<img class="cover-img" src="${esc(game.cover)}" alt="" loading="lazy" width="32" height="32" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+                   <span class="cover-fallback" style="display:none" aria-hidden="true">${esc(game.name[0])}</span>`
+                : `<span class="cover-fallback" aria-hidden="true">${esc(game.name[0])}</span>`}
+            </span>
+            ${esc(game.name)}${bgg}
+          </td>
           <td class="col-scale">${makeScale(game.difficulty)}</td>
           <td class="col-players">${players}</td>
           <td class="col-time">${esc(game.time)}</td>
