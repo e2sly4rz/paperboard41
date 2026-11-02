@@ -673,7 +673,7 @@ window.GAMES = [
     "genre": "Дедукция",
     "special": false,
     "expansions": [],
-    "description": "",
+    "description": "Игра",
     "bggId": 258309
   },
   {
