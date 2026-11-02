@@ -348,6 +348,85 @@ h2 {
   }
 }
 
+/* === Сортируемые заголовки === */
+.catalog-table th.sortable {
+  padding: 0;                     /* padding переезжает на кнопку */
+  cursor: pointer;
+  user-select: none;
+}
+.catalog-table th.sortable .sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+  text-align: inherit;
+}
+.catalog-table th.sortable:hover .sort-btn {
+  color: #000;
+}
+.catalog-table th.sortable:focus-visible .sort-btn {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.sort-arrow {
+  display: inline-block;
+  width: 0.7em;
+  font-size: 11px;
+  color: var(--ink-muted);
+  opacity: 0;
+  transition: opacity .15s ease;
+}
+.catalog-table th[aria-sort="ascending"]  .sort-arrow { opacity: 1; }
+.catalog-table th[aria-sort="descending"] .sort-arrow { opacity: 1; }
+.catalog-table th[aria-sort="ascending"]  .sort-arrow::before { content: "▲"; }
+.catalog-table th[aria-sort="descending"] .sort-arrow::before { content: "▼"; }
+
+/* Активный столбец — чуть темнее */
+.catalog-table th[aria-sort="ascending"],
+.catalog-table th[aria-sort="descending"] {
+  color: #000;
+}
+
+/* === Иконка BGG в строке === */
+.bgg-link {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 13px;
+  text-decoration: none;
+  color: var(--ink-muted);
+  opacity: .6;
+  transition: opacity .15s ease, color .15s ease;
+  vertical-align: baseline;
+}
+.bgg-link:hover,
+.bgg-link:focus-visible {
+  opacity: 1;
+  color: #b35a00;        /* фирменный оранжевый BGG */
+  outline: none;
+}
+.bgg-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* На мобиле — иконка чуть крупнее и всегда видима */
+@media (max-width: 640px) {
+  .bgg-link {
+    font-size: 15px;
+    opacity: .8;
+    margin-left: 8px;
+  }
+}
+
 /* Уважаем prefers-reduced-motion */
 @media (prefers-reduced-motion: reduce) {
   .expansion-content { transition: none; }

@@ -71,13 +71,27 @@
       <table class="catalog-table">
         <thead>
           <tr>
-            <th class="col-num">№</th>
-            <th class="col-name">Игра</th>
-            <th class="col-scale">Сложность</th>
-            <th class="col-players">Игроки</th>
-            <th class="col-time">Время</th>
-            <th class="col-genre">Жанр</th>
-            <th class="col-access">Доступ</th>
+            <th class="col-num sortable" data-sort="num" aria-sort="none">
+              <button type="button" class="sort-btn">№<span class="sort-arrow"></span></button>
+            </th>
+            <th class="col-name sortable" data-sort="name" aria-sort="ascending">
+              <button type="button" class="sort-btn">Игра<span class="sort-arrow"></span></button>
+            </th>
+            <th class="col-scale sortable" data-sort="difficulty" aria-sort="none">
+              <button type="button" class="sort-btn">Сложность<span class="sort-arrow"></span></button>
+            </th>
+            <th class="col-players sortable" data-sort="players" aria-sort="none">
+              <button type="button" class="sort-btn">Игроки<span class="sort-arrow"></span></button>
+            </th>
+            <th class="col-time sortable" data-sort="time" aria-sort="none">
+              <button type="button" class="sort-btn">Время<span class="sort-arrow"></span></button>
+            </th>
+            <th class="col-genre sortable" data-sort="genre" aria-sort="none">
+              <button type="button" class="sort-btn">Жанр<span class="sort-arrow"></span></button>
+            </th>
+            <th class="col-access sortable" data-sort="access" aria-sort="none">
+              <button type="button" class="sort-btn">Доступ<span class="sort-arrow"></span></button>
+            </th>
           </tr>
         </thead>
         <tbody id="tbody"></tbody>

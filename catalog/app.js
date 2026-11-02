@@ -5,7 +5,8 @@
   const GAMES = window.GAMES || [];
 
   // === Утилиты ===
-  const $ = (sel) => document.querySelector(sel);
+  const $  = (sel, root = document) => root.querySelector(sel);
+  const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
   const debounce = (fn, ms = 180) => {
     let t;
     return (...args) => {
@@ -14,18 +15,33 @@
     };
   };
 
-  // Шкала сложности: 9 символов, 0.5 = 1 клетка
   const makeScale = (score) => {
     const filled = Math.max(0, Math.min(9, Math.round(score * 2)));
     return "[" + "\u2588".repeat(filled) + "\u2591".repeat(9 - filled) + "]";
   };
 
-  // Безопасное экранирование HTML
   const esc = (s) => String(s)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+
+  // Парсим «30-45 мин» / «30 мин» / «120-240 мин» в числа
+  const parseTime = (s) => {
+    if (!s) return { min: 0, max: 0 };
+    const nums = String(s).match(/\d+/g);
+    if (!nums) return { min: 0, max: 0 };
+    const n = nums.map(Number);
+    return n.length === 1
+      ? { min: n[0], max: n[0] }
+      : { min: Math.min(...n), max: Math.max(...n) };
+  };
+
+  // Ссылка на BGG: по id, если есть, иначе — поиск по названию
+  const bggUrl = (game) => {
+    if (game.bggId) return `https://boardgamegeek.com/boardgame/${game.bggId}`;
+    return `https://boardgamegeek.com/geeksearch.php?action=search&q=${encodeURIComponent(game.name)}`;
+  };
 
   // === DOM ===
   const tbody        = $("#tbody");
@@ -38,8 +54,9 @@
   const accessSel    = $("#filter-access");
   const resetBtn     = $("#reset");
   const resetEmpty   = $("#reset-empty");
+  const thead        = $(".catalog-table thead");
 
-  // === Заполняем жанры (без пустых) ===
+  // === Жанры ===
   const genres = [...new Set(GAMES.map(g => g.genre).filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, "ru"));
   genres.forEach(g => {
@@ -49,8 +66,103 @@
     genreSel.appendChild(opt);
   });
 
-  // === Состояние: какая игра раскрыта (по имени, а не по индексу) ===
+  // === Состояние ===
   let openName = null;
+  let sortKey  = "name";        // name | num | difficulty | players | time | genre | access
+  let sortDir  = "asc";         // asc | desc
+
+  // === URL ⇄ состояние ===
+  const SORT_KEYS = ["name", "num", "difficulty", "players", "time", "genre", "access"];
+
+  function readStateFromURL() {
+    const params = new URLSearchParams(location.search);
+    searchInput.value = params.get("q") || "";
+    diffSelect.value  = params.get("diff")  || "any";
+    genreSel.value    = params.get("genre") || "";
+    playersSel.value  = params.get("p")     || "0";
+    accessSel.value   = params.get("a")     || "all";
+
+    const s = params.get("sort");
+    if (s) {
+      const [k, d] = s.split(":");
+      if (SORT_KEYS.includes(k)) sortKey = k;
+      if (d === "asc" || d === "desc") sortDir = d;
+    }
+
+    // Открытая строка
+    openName = params.get("open") || null;
+  }
+
+  function writeStateToURL() {
+    const params = new URLSearchParams();
+    if (searchInput.value.trim()) params.set("q", searchInput.value.trim());
+    if (diffSelect.value !== "any") params.set("diff", diffSelect.value);
+    if (genreSel.value)             params.set("genre", genreSel.value);
+    if (playersSel.value !== "0")   params.set("p", playersSel.value);
+    if (accessSel.value !== "all")  params.set("a", accessSel.value);
+    if (sortKey !== "name" || sortDir !== "asc") {
+      params.set("sort", `${sortKey}:${sortDir}`);
+    }
+    if (openName) params.set("open", openName);
+
+    const qs = params.toString();
+    const url = qs ? `?${qs}` : location.pathname;
+    history.replaceState(null, "", url);
+  }
+
+  // === Сортировка ===
+  function sortGames(list) {
+    const dir = sortDir === "asc" ? 1 : -1;
+
+    // Стабильный компаратор с fallback на имя
+    const cmp = (a, b) => {
+      let va, vb;
+      switch (sortKey) {
+        case "num":
+          // «№» — это позиция в исходном массиве, но у нас после фильтра.
+          // Сортируем по имени как запасной вариант, если num.
+          va = a.name; vb = b.name;
+          break;
+        case "difficulty":
+          va = a.difficulty; vb = b.difficulty;
+          break;
+        case "players":
+          // Сначала по min, потом по max
+          va = a.minPlayers * 1000 + a.maxPlayers;
+          vb = b.minPlayers * 1000 + b.maxPlayers;
+          break;
+        case "time": {
+          const ta = parseTime(a.time), tb = parseTime(b.time);
+          va = ta.min * 10000 + ta.max;
+          vb = tb.min * 10000 + tb.max;
+          break;
+        }
+        case "genre":
+          va = a.genre || "\uffff"; // пустые в конец
+          vb = b.genre || "\uffff";
+          break;
+        case "access":
+          // 🔒 сначала при asc
+          va = a.special ? 0 : 1;
+          vb = b.special ? 0 : 1;
+          break;
+        case "name":
+        default:
+          va = a.name; vb = b.name;
+      }
+
+      let r;
+      if (typeof va === "string") {
+        r = va.localeCompare(vb, "ru");
+      } else {
+        r = va - vb;
+      }
+      if (r === 0) r = a.name.localeCompare(b.name, "ru");
+      return r * dir;
+    };
+
+    return [...list].sort(cmp);
+  }
 
   // === Фильтрация ===
   function getFiltered() {
@@ -66,8 +178,7 @@
       dMin = lo; dMax = hi;
     }
 
-    return GAMES.filter(game => {
-      // Поиск: имя, жанр, дополнения
+    const filtered = GAMES.filter(game => {
       if (q) {
         const haystack = [
           game.name,
@@ -76,22 +187,15 @@
         ].join(" ").toLowerCase();
         if (!haystack.includes(q)) return false;
       }
-
-      // Сложность — диапазон
       if (game.difficulty < dMin || game.difficulty > dMax) return false;
-
-      // Жанр
       if (g && game.genre !== g) return false;
-
-      // Игроки: игра поддерживает N игроков
       if (p > 0 && !(game.minPlayers <= p && game.maxPlayers >= p)) return false;
-
-      // Доступ
       if (a === "yes" && !game.special) return false;
       if (a === "no"  &&  game.special) return false;
-
       return true;
-    }).sort((a, b) => a.name.localeCompare(b.name, "ru"));
+    });
+
+    return sortGames(filtered);
   }
 
   // === Рендер ===
@@ -113,6 +217,14 @@
       const hasData = hasDesc || hasExp;
 
       const isOpen = game.name === openName;
+
+      // Иконка BGG рядом с названием
+      const bgg = `<a class="bgg-link"
+                     href="${bggUrl(game)}"
+                     target="_blank" rel="noopener noreferrer"
+                     title="Открыть на BoardGameGeek"
+                     aria-label="BoardGameGeek: ${esc(game.name)}"
+                     data-bgg>🎲</a>`;
 
       let panel = "";
       if (hasData) {
@@ -145,7 +257,7 @@
             data-name="${esc(game.name)}"
             ${rowAttrs}>
           <td class="col-num">${i + 1}</td>
-          <td class="col-name">${esc(game.name)}</td>
+          <td class="col-name">${esc(game.name)}${bgg}</td>
           <td class="col-scale">${makeScale(game.difficulty)}</td>
           <td class="col-players">${players}</td>
           <td class="col-time">${esc(game.time)}</td>
@@ -157,9 +269,41 @@
 
     countEl.textContent = `Найдено: ${filtered.length} из ${GAMES.length}`;
     emptyEl.hidden = filtered.length !== 0;
+
+    updateSortIndicators();
+    writeStateToURL();
   }
 
-  // === Раскрытие/закрытие ===
+  // === Индикаторы сортировки ===
+  function updateSortIndicators() {
+    $$(".catalog-table th.sortable").forEach(th => {
+      const key = th.dataset.sort;
+      if (key === sortKey) {
+        th.setAttribute("aria-sort", sortDir === "asc" ? "ascending" : "descending");
+      } else {
+        th.setAttribute("aria-sort", "none");
+      }
+    });
+  }
+
+  // === Клик по заголовку ===
+  thead.addEventListener("click", (e) => {
+    const th = e.target.closest("th.sortable");
+    if (!th) return;
+    const key = th.dataset.sort;
+
+    if (sortKey === key) {
+      sortDir = sortDir === "asc" ? "desc" : "asc";
+    } else {
+      sortKey = key;
+      // Для сложности/времени/игроков asc = от меньшего, это логично.
+      // Для доступа asc = сначала 🔒.
+      sortDir = "asc";
+    }
+    render();
+  });
+
+  // === Раскрытие ===
   function toggleRow(row) {
     const name = row.dataset.name;
     if (!name) return;
@@ -193,15 +337,20 @@
         panel.querySelector(".expansion-content")?.classList.add("open");
       }
     }
+    writeStateToURL();
   }
 
   tbody.addEventListener("click", (e) => {
+    // Клик по иконке BGG — не раскрываем строку
+    if (e.target.closest("[data-bgg]")) return;
+
     const row = e.target.closest(".game-row");
     if (row) toggleRow(row);
   });
 
   tbody.addEventListener("keydown", (e) => {
     if (e.key !== "Enter" && e.key !== " ") return;
+    if (e.target.closest("[data-bgg]")) return;
     const row = e.target.closest(".game-row");
     if (!row) return;
     e.preventDefault();
@@ -210,7 +359,6 @@
 
   // === Фильтры ===
   const onFilterChange = debounce(render, 150);
-
   searchInput.addEventListener("input", onFilterChange);
   diffSelect.addEventListener("change", render);
   genreSel.addEventListener("change", render);
@@ -224,18 +372,20 @@
     genreSel.value = "";
     playersSel.value = "0";
     accessSel.value = "all";
+    sortKey = "name";
+    sortDir = "asc";
     openName = null;
     render();
     searchInput.focus();
   }
-
   resetBtn.addEventListener("click", resetFilters);
   resetEmpty.addEventListener("click", resetFilters);
 
-  // === Первый рендер ===
+  // === Старт ===
   if (GAMES.length === 0) {
     countEl.textContent = "Не удалось загрузить каталог (games.js).";
     return;
   }
+  readStateFromURL();
   render();
 })();
