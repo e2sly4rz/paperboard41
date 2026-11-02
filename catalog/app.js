@@ -39,12 +39,12 @@
 
   // Ссылка на BGG: по id
   const bggUrl = (game) => {
-    // 1) Если есть bggId — ведём прямо на страницу игры
+    // 1) Прямая ссылка на игру, если есть bggId — самый надёжный вариант
     if (game.bggId) {
       return `https://boardgamegeek.com/boardgame/${game.bggId}`;
     }
-    // 2) Иначе — на новую страницу поиска BGG (не geeksearch.php)
-    return `https://boardgamegeek.com/search?q=${encodeURIComponent(game.name)}`;
+    // 2) Иначе — поиск через Google по сайту BGG (обход Cloudflare-блокировки поиска)
+    return `https://www.google.com/search?q=${encodeURIComponent('site:boardgamegeek.com ' + game.name)}`;
   };
 
   // === DOM ===
