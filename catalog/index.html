@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5">
+  <title>Картонный Экспресс | Каталог игр</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="print-sheet">
+    <h2>Картонный Экспресс | Каталог игр</h2>
+
+    <p class="legend">
+      Шкала сложности: █ — 0.5 балла. 1 балл = █░░░░░░░░, 5 баллов = █████████
+      &nbsp;·&nbsp; 🔒 — особый вагон
+    </p>
+
+    <form class="controls" id="filters" role="search" aria-label="Фильтры каталога">
+      <div class="control">
+        <label for="search">Поиск:</label>
+        <input type="search" id="search" placeholder="название, жанр, дополнение…" autocomplete="off">
+      </div>
+
+      <div class="control">
+        <label for="filter-difficulty">Сложность:</label>
+        <select id="filter-difficulty">
+          <option value="any">Любая</option>
+          <option value="0.5-1">до 1 (очень просто)</option>
+          <option value="1-2">1–2 (просто)</option>
+          <option value="2-3">2–3 (средне)</option>
+          <option value="3-4">3–4 (сложно)</option>
+          <option value="4-5">4–5 (хардкор)</option>
+        </select>
+      </div>
+
+      <div class="control">
+        <label for="filter-genre">Жанр:</label>
+        <select id="filter-genre">
+          <option value="">Все</option>
+          <!-- заполняется из JS -->
+        </select>
+      </div>
+
+      <div class="control">
+        <label for="filter-players">Игроки:</label>
+        <select id="filter-players">
+          <option value="0">Любое</option>
+          <option value="1">1+</option>
+          <option value="2">2+</option>
+          <option value="3">3+</option>
+          <option value="4">4+</option>
+          <option value="5">5+</option>
+          <option value="6">6+</option>
+        </select>
+      </div>
+
+      <div class="control">
+        <label for="filter-access">Доступ:</label>
+        <select id="filter-access">
+          <option value="all">Любой</option>
+          <option value="yes">Только особый вагон</option>
+          <option value="no">Только обычные</option>
+        </select>
+      </div>
+
+      <button type="button" class="reset-btn" id="reset">Сбросить</button>
+    </form>
+
+    <div class="count" id="count" aria-live="polite"></div>
+
+    <div class="table-wrap">
+      <table class="catalog-table">
+        <thead>
+          <tr>
+            <th class="col-num">№</th>
+            <th class="col-name">Игра</th>
+            <th class="col-scale">Сложность</th>
+            <th class="col-players">Игроки</th>
+            <th class="col-time">Время</th>
+            <th class="col-genre">Жанр</th>
+            <th class="col-access">Доступ</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      <div class="empty" id="empty" hidden>
+        <p>Ничего не найдено.</p>
+        <button type="button" class="reset-btn" id="reset-empty">Сбросить фильтры</button>
+      </div>
+    </div>
+  </main>
+
+  <script src="games.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
