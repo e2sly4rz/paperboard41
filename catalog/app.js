@@ -37,10 +37,14 @@
       : { min: Math.min(...n), max: Math.max(...n) };
   };
 
-  // Ссылка на BGG: по id, если есть, иначе — поиск по названию
+  // Ссылка на BGG: по id
   const bggUrl = (game) => {
-    if (game.bggId) return `https://boardgamegeek.com/boardgame/${game.bggId}`;
-    return `https://boardgamegeek.com/geeksearch.php?action=search&q=${encodeURIComponent(game.name)}`;
+    // 1) Если есть bggId — ведём прямо на страницу игры
+    if (game.bggId) {
+      return `https://boardgamegeek.com/boardgame/${game.bggId}`;
+    }
+    // 2) Иначе — на новую страницу поиска BGG (не geeksearch.php)
+    return `https://boardgamegeek.com/search?q=${encodeURIComponent(game.name)}`;
   };
 
   // === DOM ===
