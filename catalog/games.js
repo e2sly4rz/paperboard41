@@ -412,7 +412,8 @@ window.GAMES = [
     "expansions": [
       "Киклады: Легендарное издание - Мальстрём"
     ],
-    "description": "Стратегия про развитие древнегреческих островов с аукционом и контролем территорий для ценителей античной культуры"
+    "description": "Стратегия про развитие древнегреческих островов с аукционом и контролем территорий для ценителей античной культуры",
+    "bggId": 380619
   },
   {
     "name": "La Cosa Nostra",
@@ -434,7 +435,8 @@ window.GAMES = [
     "genre": "Стратегия",
     "special": false,
     "expansions": [],
-    "description": "Экономическая стратегия про развитие новых территорий с управлением ресурсами для любителей классических игр старой школы"
+    "description": "Экономическая стратегия про развитие новых территорий с управлением ресурсами для любителей классических игр старой школы",
+    "bggId": 13
   },
   {
     "name": "Кольт Экспресс: Большое приключение",
@@ -509,7 +511,8 @@ window.GAMES = [
     "genre": "Кооператив",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 378731
   },
   {
     "name": "Лимпопо",
@@ -520,7 +523,8 @@ window.GAMES = [
     "genre": "Карточная",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 84732
   },
   {
     "name": "Марипосас",
@@ -673,7 +677,8 @@ window.GAMES = [
     "genre": "Викторина",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 387763
   },
   {
     "name": "Первый контакт",
@@ -696,7 +701,8 @@ window.GAMES = [
     "genre": "Карточная",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 411875
   },
   {
     "name": "Повелитель Токио: Тёмное издание",
@@ -856,7 +862,8 @@ window.GAMES = [
       "Шёпот за стеной: Животный инстинкт",
       "Шёпот за стеной: Угроза извне"
     ],
-    "description": ""
+    "description": "",
+    "bggId": 371433
   },
   {
     "name": "Щелчок судьбы",
@@ -994,7 +1001,8 @@ window.GAMES = [
     "genre": "Стратегия",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 377061
   },
   {
     "name": "Города",
@@ -2158,7 +2166,8 @@ window.GAMES = [
     "genre": "Абстракт",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 414317
   },
   {
     "name": "Домик",
@@ -3568,7 +3577,8 @@ window.GAMES = [
     "genre": "Стратегия",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 386502
   },
   {
     "name": "Амул",
