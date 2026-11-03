@@ -485,7 +485,8 @@ window.GAMES = [
     "expansions": [
       "Крутое пике: Турбулентность"
     ],
-    "description": ""
+    "description": "",
+    "bggId": 373106
   },
   {
     "name": "Кто накормит Кракена?",
@@ -496,7 +497,8 @@ window.GAMES = [
     "genre": "Дедукция",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 271601
   },
   {
     "name": "Легенды города гангстеров",
@@ -633,7 +635,8 @@ window.GAMES = [
     "genre": "Карточная",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 270445
   },
   {
     "name": "Опасные гости. Кто убил мистера Уолтона?",
@@ -910,7 +913,8 @@ window.GAMES = [
     "genre": "Абстракт",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 366994
   },
   {
     "name": "Ботанический сад",
@@ -932,7 +936,8 @@ window.GAMES = [
     "genre": "Карточная",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 361241
   },
   {
     "name": "Вампирчики",
@@ -1011,7 +1016,8 @@ window.GAMES = [
     "genre": "",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 40793
   },
   {
     "name": "Долина вечности",
