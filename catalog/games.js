@@ -471,7 +471,8 @@ window.GAMES = [
     "genre": "Дедукция",
     "special": true,
     "expansions": [],
-    "description": "Детективная игра про расследование загадочных преступлений с переговорами для любителей Мафии"
+    "description": "Детективная игра про расследование загадочных преступлений с переговорами для любителей Мафии",
+    "bggId": 240980
   },
   {
     "name": "Крутое пике",
@@ -620,7 +621,8 @@ window.GAMES = [
     "expansions": [
       "Море, соль, бумага: Больше соли"
     ],
-    "description": ""
+    "description": "",
+    "bggId": 367220
   },
   {
     "name": "Омерта",
@@ -884,7 +886,8 @@ window.GAMES = [
     "genre": "Стратегия",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 371942
   },
   {
     "name": "Битва ресторанов",
@@ -951,7 +954,8 @@ window.GAMES = [
     "genre": "Карточная",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 323262
   },
   {
     "name": "Венецианская мозаика",
@@ -962,7 +966,8 @@ window.GAMES = [
     "genre": "Стратегия",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 346501
   },
   {
     "name": "Взлет разрешен",
@@ -1017,7 +1022,8 @@ window.GAMES = [
     "genre": "Стратегия",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 385529
   },
   {
     "name": "За корону",
@@ -1633,7 +1639,8 @@ window.GAMES = [
     "genre": "Стратегия",
     "special": true,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 305096
   },
   {
     "name": "Эпичные схватки боевых магов: Крутагидон. Экстремально острый чипсихоз",
@@ -1678,7 +1685,8 @@ window.GAMES = [
     "genre": "Карточная",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 370479
   },
   {
     "name": "Шериф Ноттингема 2 издание",
@@ -2419,6 +2427,18 @@ window.GAMES = [
     "special": false,
     "expansions": [],
     "description": ""
+  },
+  {
+    "name": "Врата в Поднебесную",
+    "difficulty": 1.5,
+    "minPlayers": 2,
+    "maxPlayers": 4,
+    "time": "20-35 мин",
+    "genre": "",
+    "special": false,
+    "expansions": [],
+    "description": "",
+    "bggId": 283924
   },
   {
     "name": "Цербер",
@@ -3565,7 +3585,8 @@ window.GAMES = [
     "genre": "Стратегия",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 376363
   },
   {
     "name": "Битва сказок",
