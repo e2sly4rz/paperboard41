@@ -542,7 +542,8 @@ window.GAMES = [
       "Место преступления: Нуар",
       "Место преступления: Тайны Редвью"
     ],
-    "description": ""
+    "description": "",
+    "bggId": 239188
   },
   {
     "name": "Место преступления: Прекрасная эпоха",
@@ -639,7 +640,8 @@ window.GAMES = [
     "genre": "Дедукция",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 188866
   },
   {
     "name": "Остров сокровищ: Тайна Джона Сильвера",
@@ -791,7 +793,8 @@ window.GAMES = [
     "genre": "Стратегия",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 265017
   },
   {
     "name": "Трон кубов",
@@ -2256,7 +2259,8 @@ window.GAMES = [
     "genre": "Абстракт",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 201006
   },
   {
     "name": "Драфтозавры",
@@ -3758,6 +3762,18 @@ window.GAMES = [
     "special": false,
     "expansions": [],
     "description": ""
+  },
+  {
+    "name": "Ёзу",
+    "difficulty": 1,
+    "minPlayers": 3,
+    "maxPlayers": 6,
+    "time": "30 мин",
+    "genre": "",
+    "special": false,
+    "expansions": [],
+    "description": "",
+    "bggId": 260709
   },
   {
     "name": "Нечто: Из глубины бездны",
