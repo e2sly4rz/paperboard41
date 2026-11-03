@@ -603,7 +603,8 @@ window.GAMES = [
     "genre": "Стратегия",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 70916
   },
   {
     "name": "Море, соль, бумага",
@@ -2142,7 +2143,8 @@ window.GAMES = [
     "genre": "Карточная",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 194880
   },
   {
     "name": "Живой лес",
@@ -2437,7 +2439,8 @@ window.GAMES = [
     "genre": "Пати-гейм",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 178900
   },
   {
     "name": "That's Not a Hat",
@@ -3568,7 +3571,8 @@ window.GAMES = [
     "genre": "Карточная",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 3955
   },
   {
     "name": "Бэнг. Звездные войны",
