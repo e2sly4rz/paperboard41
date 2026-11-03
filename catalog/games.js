@@ -700,7 +700,8 @@ window.GAMES = [
     "genre": "Пати-гейм",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 293141
   },
   {
     "name": "Погоня за Авророй",
@@ -891,7 +892,8 @@ window.GAMES = [
     "genre": "Стратегия",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 262114
   },
   {
     "name": "Бонсай",
@@ -1659,7 +1661,8 @@ window.GAMES = [
     "genre": "Карточная",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 172242
   },
   {
     "name": "Внутри Лапенко",
@@ -2124,7 +2127,8 @@ window.GAMES = [
     "genre": "Карточная",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 54043
   },
   {
     "name": "Гармония",
@@ -3542,7 +3546,8 @@ window.GAMES = [
     "genre": "Стратегия",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 260710
   },
   {
     "name": "Битва десертов. Конкурс кондитеров",
@@ -3587,7 +3592,8 @@ window.GAMES = [
     "genre": "Карточная",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 319336
   },
   {
     "name": "В двух словах",
