@@ -556,7 +556,8 @@ window.GAMES = [
     "expansions": [
       "Место преступления: Сквозь века"
     ],
-    "description": ""
+    "description": "",
+    "bggId": 302098
   },
   {
     "name": "Место преступления: Средневековье",
@@ -569,7 +570,8 @@ window.GAMES = [
     "expansions": [
       "Место преступления: Сквозь века"
     ],
-    "description": ""
+    "description": "",
+    "bggId": 300300
   },
   {
     "name": "Место преступления: Будущее",
@@ -783,7 +785,8 @@ window.GAMES = [
     "genre": "Стратегия",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 336847
   },
   {
     "name": "Тортуга 2199",
@@ -1058,7 +1061,8 @@ window.GAMES = [
     "genre": "Стратегия",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 318084
   },
   {
     "name": "Карта сокровищ",
@@ -1124,7 +1128,8 @@ window.GAMES = [
     "genre": "Стратегия",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 332386
   },
   {
     "name": "Менестрели",
@@ -2278,7 +2283,8 @@ window.GAMES = [
       "Драфтозавры. Водные",
       "Драфтозавры. Летающие"
     ],
-    "description": ""
+    "description": "",
+    "bggId": 264055
   },
   {
     "name": "Имаджинариум. Семиречье",
@@ -3414,7 +3420,8 @@ window.GAMES = [
     "genre": "Пати-гейм",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 329839
   },
   {
     "name": "Экипаж: Погружение в бездну",
