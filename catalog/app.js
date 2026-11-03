@@ -413,6 +413,14 @@
   playersSel.addEventListener("change", render);
   accessSel.addEventListener("change", render);
 
+  // Enter в поиске: применить фильтры сразу и не перезагружать страницу
+  const filtersForm = $("#filters");
+  filtersForm?.addEventListener("submit", (e) => {
+    e.preventDefault();
+    render();            // применить фильтры немедленно (без ожидания debounce)
+    searchInput.blur();  // убрать фокус (на мобиле скроет клавиатуру)
+  });
+
   // === Сброс ===
   function resetFilters() {
     searchInput.value = "";
