@@ -1,0 +1,5 @@
+# исходники обложек — не коммитим, только результат
+covers/
+
+# node_modules для sharp
+node_modules/
