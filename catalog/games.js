@@ -452,7 +452,8 @@ window.GAMES = [
       "Colt Express: Cursed Loot",
       "Colt Express: The Time Travel Car"
     ],
-    "description": "Вестерн-приключение про ограбление поезда на Диком Западе с тактическими действиями на программирование действий для ценителей ковбойской тематики"
+    "description": "Вестерн-приключение про ограбление поезда на Диком Западе с тактическими действиями на программирование действий для ценителей ковбойской тематики",
+    "bggId": 341504
   },
   {
     "name": "Криптид",
@@ -536,7 +537,8 @@ window.GAMES = [
     "genre": "Стратегия",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 297978
   },
   {
     "name": "Место преступления",
@@ -934,7 +936,8 @@ window.GAMES = [
     "genre": "Абстракт",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 413260
   },
   {
     "name": "Ваальбара",
@@ -1051,7 +1054,8 @@ window.GAMES = [
     "genre": "Карточная",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 431248
   },
   {
     "name": "Замок де Комбо",
@@ -1129,7 +1133,8 @@ window.GAMES = [
     "genre": "Стратегия",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 266192
   },
   {
     "name": "Лаборатория",
@@ -1826,7 +1831,8 @@ window.GAMES = [
     "genre": "Карточная",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 406854
   },
   {
     "name": "Корпус открытий",
@@ -1842,7 +1848,8 @@ window.GAMES = [
       "Корпус открытий: Мальдонадо",
       "Корпус открытий: Туман"
     ],
-    "description": ""
+    "description": "",
+    "bggId": 396895
   },
   {
     "name": "Ориентиры",
@@ -2146,7 +2153,8 @@ window.GAMES = [
     "genre": "Карточная",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 192074
   },
   {
     "name": "Джайпур",
@@ -3121,6 +3129,18 @@ window.GAMES = [
     "description": ""
   },
   {
+    "name": "Герои не Меча и не Магии",
+    "difficulty": 1,
+    "minPlayers": 2,
+    "maxPlayers": 4,
+    "time": "",
+    "genre": "",
+    "special": false,
+    "expansions": [],
+    "description": "",
+    "bggId": 470776
+  },
+  {
     "name": "Дальше и Ближе",
     "difficulty": 2.5,
     "minPlayers": 2,
@@ -3645,18 +3665,16 @@ window.GAMES = [
     "bggId": 319336
   },
   {
-    "name": "В двух словах",
+    "name": "В двух словах: Кино",
     "difficulty": 2,
     "minPlayers": 2,
     "maxPlayers": 7,
     "time": "15 мин",
     "genre": "Пати-гейм",
     "special": false,
-    "expansions": [
-      "Кино",
-      "Игры"
-    ],
-    "description": ""
+    "expansions": [],
+    "description": "",
+    "bggId": 451848
   },
   {
     "name": "В пещере дракона",
