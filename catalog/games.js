@@ -424,7 +424,8 @@ window.GAMES = [
     "genre": "Переговоры",
     "special": false,
     "expansions": [],
-    "description": "Криминальная игра про строительство мафиозной империи с тактическим планированием для поклонников криминальных сюжетов и переговоров"
+    "description": "Криминальная игра про строительство мафиозной империи с тактическим планированием для поклонников криминальных сюжетов и переговоров",
+    "bggId": 151771
   },
   {
     "name": "Колонизаторы",
@@ -602,7 +603,8 @@ window.GAMES = [
     "genre": "Стратегия",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 176920
   },
   {
     "name": "Монстры рока",
@@ -990,7 +992,8 @@ window.GAMES = [
     "genre": "Стратегия",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 218769
   },
   {
     "name": "Время кофе",
@@ -2190,7 +2193,8 @@ window.GAMES = [
     "genre": "Стратегия",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 328479
   },
   {
     "name": "Идеальный кадр",
@@ -3613,7 +3617,8 @@ window.GAMES = [
     "genre": "Карточная",
     "special": false,
     "expansions": [],
-    "description": ""
+    "description": "",
+    "bggId": 423517
   },
   {
     "name": "Бэнг",
