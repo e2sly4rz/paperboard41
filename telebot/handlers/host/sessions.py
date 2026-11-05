@@ -64,7 +64,11 @@ async def sessions_manage(call: CallbackQuery) -> None:
             for s in sessions
         )
         if not has_authored:
-            await call.answer("Нет доступа", show_alert=True)
+            await call.answer(
+                "В этой игротеке у вас нет своих игр. "
+                "Добавьте игру через «➕ Добавить игру».",
+                show_alert=True,
+            )
             return
 
     if not sessions:

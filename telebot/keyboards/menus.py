@@ -140,10 +140,10 @@ def host_menu_empty() -> InlineKeyboardMarkup:
 def host_night_card(night_id: int, is_owner: bool = True) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.button(text="➕ Добавить игру", callback_data=f"hn_add:{night_id}")
+    kb.button(text="🎲 Управление играми", callback_data=f"hn_sessions:{night_id}")
     if is_owner:
         kb.button(text="📅 Изменить дату", callback_data=f"hn_date:{night_id}")
         kb.button(text="📍 Изменить место", callback_data=f"hn_loc:{night_id}")
-        kb.button(text="🎲 Управление играми", callback_data=f"hn_sessions:{night_id}")
         kb.button(text="🗑 Удалить игротеку", callback_data=f"hn_del:{night_id}")
     kb.button(text="⬅️ К списку", callback_data="host_menu")
     kb.adjust(1)
