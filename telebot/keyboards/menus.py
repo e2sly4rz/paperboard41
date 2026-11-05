@@ -3,8 +3,6 @@ from datetime import datetime
 from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from aiogram_calendar import SimpleCalendar
-
 from config import ADMIN_ID
 
 
@@ -82,18 +80,14 @@ def my_games_list(regs: list[dict]) -> InlineKeyboardMarkup:
     return kb.as_markup()
 
 
-def host_menu() -> InlineKeyboardMarkup:
+# ---------- Меню организатора ----------
+
+def host_menu_with_nights(nights: list[dict],
+                          own_ids: set[int] | None = None) -> InlineKeyboardMarkup:
+    """Меню организатора: кнопка создания + сразу список игротек."""
     kb = InlineKeyboardBuilder()
     kb.button(text="➕ Создать игротеку", callback_data="host_create")
-    kb.button(text="✏️ Все игротеки", callback_data="host_manage_list")
-    kb.button(text="⬅️ Назад", callback_data="back_main")
-    kb.adjust(1)
-    return kb.as_markup()
 
-
-def host_nights_list(nights: list[dict],
-                     own_ids: set[int] | None = None) -> InlineKeyboardMarkup:
-    kb = InlineKeyboardBuilder()
     for n in nights:
         is_own = own_ids is None or n["id"] in own_ids
         prefix = "🎩" if is_own else "👀"
@@ -102,10 +96,22 @@ def host_nights_list(nights: list[dict],
                  f"(игр: {n['sessions_count']}, записей: {n['total_taken']})",
             callback_data=f"hn:{n['id']}",
         )
-    kb.button(text="⬅️ Назад", callback_data="host_menu")
+
+    kb.button(text="⬅️ Назад", callback_data="back_main")
     kb.adjust(1)
     return kb.as_markup()
 
+
+def host_menu_empty() -> InlineKeyboardMarkup:
+    """Меню организатора, когда игротек нет."""
+    kb = InlineKeyboardBuilder()
+    kb.button(text="➕ Создать игротеку", callback_data="host_create")
+    kb.button(text="⬅️ Назад", callback_data="back_main")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+# ---------- Клавиатуры хоста ----------
 
 def host_night_card(night_id: int, is_owner: bool = True) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
@@ -115,7 +121,7 @@ def host_night_card(night_id: int, is_owner: bool = True) -> InlineKeyboardMarku
         kb.button(text="📍 Изменить место", callback_data=f"hn_loc:{night_id}")
         kb.button(text="🎲 Управление играми", callback_data=f"hn_sessions:{night_id}")
         kb.button(text="🗑 Удалить игротеку", callback_data=f"hn_del:{night_id}")
-    kb.button(text="⬅️ К списку", callback_data="host_manage_list")
+    kb.button(text="⬅️ К списку", callback_data="host_menu")
     kb.adjust(1)
     return kb.as_markup()
 
@@ -193,9 +199,8 @@ def search_prompt_keyboard(cancel_callback: str) -> InlineKeyboardMarkup:
     kb.adjust(1)
     return kb.as_markup()
 
-async def get_calendar() -> SimpleCalendar:
-    """Возвращает календарь с русской локализацией."""
-    return SimpleCalendar(locale="ru_RU")
+
+# ---------- Ввод времени и мест ----------
 
 def time_start_picker() -> InlineKeyboardMarkup:
     """Кнопки времени начала с шагом 1 час: 10:00, 11:00, …, 23:00."""
@@ -209,11 +214,7 @@ def time_start_picker() -> InlineKeyboardMarkup:
 
 
 def duration_picker(game: dict) -> InlineKeyboardMarkup:
-    """Кнопки длительности с шагом 1 час: 1 ч, 2 ч, …, 6 ч.
-
-    Если длительность попадает в диапазон duration_min–duration_max
-    из карточки игры — добавляется галочка ✓.
-    """
+    """Кнопки длительности с шагом 1 час, с подсказками из карточки игры."""
     kb = InlineKeyboardBuilder()
     dmin = game.get("duration_min") or 0
     dmax = game.get("duration_max") or 999
@@ -232,19 +233,14 @@ def duration_picker(game: dict) -> InlineKeyboardMarkup:
 
 def slots_picker_autofill(game: dict,
                           default_slots: int) -> InlineKeyboardMarkup:
-    """Автоподстановка рекомендуемого количества мест.
-
-    Показывает max_players как основную кнопку + альтернативы.
-    """
+    """Автоподстановка рекомендуемого количества мест."""
     kb = InlineKeyboardBuilder()
 
-    # Основная кнопка — max_players
     kb.button(
         text=f"✅ Поставить {default_slots} мест",
         callback_data=f"pickslots:{default_slots}",
     )
 
-    # Альтернативы — от min_players до max_players, кроме default
     min_p = game.get("min_players") or 1
     max_p = game.get("max_players") or default_slots
     for n in range(min_p, max_p + 1):

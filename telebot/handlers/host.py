@@ -4,7 +4,7 @@ import aiosqlite
 from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
-
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram_calendar import SimpleCalendar, SimpleCalendarCallback
 
 from config import DB_PATH
@@ -26,11 +26,8 @@ from database.queries import (
 )
 from keyboards.menus import (
     main_menu,
-    host_menu,
-    time_start_picker,
-    duration_picker,
-    slots_picker_autofill,
-    host_nights_list,
+    host_menu_with_nights,
+    host_menu_empty,
     host_night_card,
     host_sessions_list,
     confirm_delete_night,
@@ -39,6 +36,9 @@ from keyboards.menus import (
     games_search_results,
     games_search_create,
     search_prompt_keyboard,
+    time_start_picker,
+    duration_picker,
+    slots_picker_autofill,
 )
 from states.states import CreateNight, EditNight, AddSessionToNight
 from utils import is_admin
@@ -56,7 +56,6 @@ async def _is_host_or_admin(user_id: int) -> bool:
 
 
 async def _can_manage_night(user_id: int, night: dict | None) -> bool:
-    """Право управлять игротекой: владелец-хост или админ."""
     if night is None:
         return False
     if is_admin(user_id):
@@ -71,6 +70,14 @@ def _fmt_date(iso_date: str) -> str:
         return iso_date or "—"
 
 
+def _add_minutes(time_str: str, minutes: int) -> str:
+    h, m = map(int, time_str.split(":"))
+    total = h * 60 + m + minutes
+    new_h = (total // 60) % 24
+    new_m = total % 60
+    return f"{new_h:02d}:{new_m:02d}"
+
+
 # ============ МЕНЮ ОРГАНИЗАТОРА ============
 
 @router.callback_query(F.data == "host_menu")
@@ -78,11 +85,76 @@ async def open_host_menu(call: CallbackQuery) -> None:
     if not await _is_host_or_admin(call.from_user.id):
         await call.answer("Только для организаторов", show_alert=True)
         return
-    await call.message.edit_text("Меню организатора:", reply_markup=host_menu())
+
+    nights = await list_all_upcoming_nights()
+
+    if not nights:
+        await call.message.edit_text(
+            "🎩 <b>Меню организатора</b>\n\n"
+            "Предстоящих игротек пока нет. Создайте первую!",
+            parse_mode="HTML",
+            reply_markup=host_menu_empty(),
+        )
+        await call.answer()
+        return
+
+    own_ids = {
+        n["id"] for n in nights
+        if n["host_telegram_id"] == call.from_user.id
+    }
+
+    await call.message.edit_text(
+        "🎩 <b>Меню организатора</b>\n\n"
+        "Выберите игротеку или создайте новую:",
+        parse_mode="HTML",
+        reply_markup=host_menu_with_nights(nights, own_ids),
+    )
     await call.answer()
 
 
 # ============ СОЗДАНИЕ ИГРОТЕКИ ============
+
+async def _finalize_session(message, state: FSMContext,
+                            slots: int, user_id: int) -> None:
+    data = await state.get_data()
+    game = await get_game(data["game_id"])
+
+    night_id = data.get("night_id")
+    if night_id is None:
+        night_id = await create_game_night(
+            data["date"], data["location"], user_id
+        )
+        await state.update_data(night_id=night_id)
+
+    await add_session(
+        night_id,
+        data["game_id"],
+        data["time_start"],
+        data["time_end"],
+        slots,
+    )
+
+    date_display = data.get("date_display", data["date"])
+    text = (
+        f"✅ Добавлена игра «{game['title']}» "
+        f"({data['time_start']}–{data['time_end']}), мест: {slots}.\n\n"
+        f"Игротека: {date_display}, {data['location']}.\n\n"
+        f"Что дальше?"
+    )
+
+    await state.update_data(
+        game_id=None, time_start=None, time_end=None, slots=None
+    )
+    await state.set_state(CreateNight.searching_game)
+
+    kb = InlineKeyboardBuilder()
+    kb.button(text="➕ Добавить ещё игру", callback_data="host_add_more")
+    kb.button(text="✅ Завершить создание", callback_data="host_finish")
+    kb.button(text="❌ Отмена", callback_data="host_cancel")
+    kb.adjust(1)
+
+    await message.answer(text, reply_markup=kb.as_markup())
+
 
 @router.callback_query(F.data == "host_create")
 async def start_create(call: CallbackQuery, state: FSMContext) -> None:
@@ -93,11 +165,12 @@ async def start_create(call: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
     await state.set_state(CreateNight.date)
 
-    calendar = SimpleCalendar(locale="ru_RU.UTF-8", show_alerts=True)
+    calendar = SimpleCalendar(locale="ru_RU", show_alerts=True)
     calendar.set_dates_range(
         datetime.now(),
         datetime.now() + timedelta(days=365),
     )
+
     await call.message.edit_text(
         "Создание игротеки.\n\nВыберите дату:",
         reply_markup=await calendar.start_calendar(),
@@ -111,7 +184,7 @@ async def enter_date(
     callback_data: SimpleCalendarCallback,
     state: FSMContext,
 ) -> None:
-    calendar = SimpleCalendar(locale="ru_RU.UTF-8", show_alerts=True)
+    calendar = SimpleCalendar(locale="ru_RU", show_alerts=True)
     calendar.set_dates_range(
         datetime.now(),
         datetime.now() + timedelta(days=365),
@@ -191,6 +264,7 @@ async def pick_game(call: CallbackQuery, state: FSMContext) -> None:
     )
     await call.answer()
 
+
 @router.callback_query(F.data.startswith("pickstart:"), CreateNight.time_start)
 async def pick_time_start(call: CallbackQuery, state: FSMContext) -> None:
     value = call.data.split(":", 1)[1]
@@ -218,93 +292,6 @@ async def pick_time_start(call: CallbackQuery, state: FSMContext) -> None:
     )
     await call.answer()
 
-def _add_minutes(time_str: str, minutes: int) -> str:
-    """Прибавляет минуты к строке 'ЧЧ:ММ'. Возвращает 'ЧЧ:ММ'."""
-    h, m = map(int, time_str.split(":"))
-    total = h * 60 + m + minutes
-    new_h = (total // 60) % 24
-    new_m = total % 60
-    return f"{new_h:02d}:{new_m:02d}"
-
-async def _finalize_session(message, state: FSMContext,
-                            slots: int, user_id: int) -> None:
-    """Создаёт сессию и показывает результат."""
-    data = await state.get_data()
-    game = await get_game(data["game_id"])
-
-    night_id = data.get("night_id")
-    if night_id is None:
-        night_id = await create_game_night(
-            data["date"], data["location"], user_id
-        )
-        await state.update_data(night_id=night_id)
-
-    await add_session(
-        night_id,
-        data["game_id"],
-        data["time_start"],
-        data["time_end"],
-        slots,
-    )
-
-    date_display = data.get("date_display", data["date"])
-    text = (
-        f"✅ Добавлена игра «{game['title']}» "
-        f"({data['time_start']}–{data['time_end']}), мест: {slots}.\n\n"
-        f"Игротека: {date_display}, {data['location']}.\n\n"
-        f"Что дальше?"
-    )
-
-    await state.update_data(
-        game_id=None, time_start=None, time_end=None, slots=None
-    )
-    await state.set_state(CreateNight.searching_game)
-
-    from aiogram.utils.keyboard import InlineKeyboardBuilder
-    kb = InlineKeyboardBuilder()
-    kb.button(text="➕ Добавить ещё игру", callback_data="host_add_more")
-    kb.button(text="✅ Завершить создание", callback_data="host_finish")
-    kb.button(text="❌ Отмена", callback_data="host_cancel")
-    kb.adjust(1)
-
-    await message.answer(text, reply_markup=kb.as_markup())
-
-async def _finalize_add_session(message, state: FSMContext,
-                                slots: int, user_id: int) -> None:
-    """Добавляет сессию в существующую игротеку."""
-    data = await state.get_data()
-    night_id = data["night_id"]
-    game_id = data["game_id"]
-
-    await add_session(
-        night_id,
-        game_id,
-        data["time_start"],
-        data["time_end"],
-        slots,
-    )
-    await state.clear()
-
-    game = await get_game(game_id)
-    night = await get_night(night_id)
-    can_manage = await _can_manage_night(user_id, night)
-    sessions = await get_night_sessions_for_edit(night_id)
-
-    if can_manage:
-        text = (
-            f"✅ Игра «{game['title']}» добавлена в игротеку.\n"
-            f"📅 {_fmt_date(night['date'])} • {night['location']}\n\n"
-            f"Нажмите 🗑 на игре, чтобы удалить её, "
-            f"или ➕, чтобы добавить ещё:"
-        )
-        await message.answer(text, reply_markup=host_sessions_list(night_id, sessions))
-    else:
-        await message.answer(
-            f"✅ Игра «{game['title']}» добавлена в игротеку "
-            f"{_fmt_date(night['date'])} ({night['location']}).",
-            reply_markup=host_night_card(night_id, is_owner=False),
-        )
-
 
 @router.callback_query(F.data.startswith("pickdur:"), CreateNight.time_end)
 async def pick_duration(call: CallbackQuery, state: FSMContext) -> None:
@@ -322,7 +309,6 @@ async def pick_duration(call: CallbackQuery, state: FSMContext) -> None:
     time_end = _add_minutes(time_start, minutes)
 
     if time_end <= time_start:
-        # Перешли через полночь — предупреждаем
         await call.answer(
             "Игра заканчивается на следующий день. "
             "Выберите меньшую длительность или введите окончание вручную.",
@@ -347,6 +333,7 @@ async def pick_duration(call: CallbackQuery, state: FSMContext) -> None:
     )
     await call.answer()
 
+
 @router.callback_query(F.data.startswith("pickslots:"), CreateNight.slots)
 async def pick_slots(call: CallbackQuery, state: FSMContext) -> None:
     value = call.data.split(":", 1)[1]
@@ -362,6 +349,8 @@ async def pick_slots(call: CallbackQuery, state: FSMContext) -> None:
     await call.answer()
 
 
+# --- Ручной ввод как fallback ---
+
 @router.message(CreateNight.time_start)
 async def enter_time_start(message: Message, state: FSMContext) -> None:
     try:
@@ -371,7 +360,16 @@ async def enter_time_start(message: Message, state: FSMContext) -> None:
         return
     await state.update_data(time_start=message.text.strip())
     await state.set_state(CreateNight.time_end)
-    await message.answer("Введите время окончания в формате ЧЧ:ММ:")
+
+    data = await state.get_data()
+    game = await get_game(data["game_id"])
+    await message.answer(
+        f"⏰ Начало: <b>{message.text.strip()}</b>\n\n"
+        f"🎲 {game['title']}\n\n"
+        f"Выберите длительность партии:",
+        parse_mode="HTML",
+        reply_markup=duration_picker(game),
+    )
 
 
 @router.message(CreateNight.time_end)
@@ -383,11 +381,21 @@ async def enter_time_end(message: Message, state: FSMContext) -> None:
         return
     data = await state.get_data()
     if message.text.strip() <= data["time_start"]:
-        await message.answer("Время окончания должно быть позже начала. Повторите:")
+        await message.answer(
+            "Время окончания должно быть позже начала. Повторите:"
+        )
         return
     await state.update_data(time_end=message.text.strip())
     await state.set_state(CreateNight.slots)
-    await message.answer("Сколько свободных мест на эту игру?")
+
+    game = await get_game(data["game_id"])
+    default_slots = game.get("max_players") or 4
+    await message.answer(
+        f"⏰ Время: <b>{data['time_start']}–{message.text.strip()}</b>\n\n"
+        f"Сколько свободных мест?",
+        parse_mode="HTML",
+        reply_markup=slots_picker_autofill(game, default_slots),
+    )
 
 
 @router.message(CreateNight.slots)
@@ -396,45 +404,7 @@ async def enter_slots(message: Message, state: FSMContext) -> None:
         await message.answer("Введите положительное число:")
         return
     slots = int(message.text.strip())
-    await state.update_data(slots=slots)
-
-    data = await state.get_data()
-    game = await get_game(data["game_id"])
-
-    night_id = data.get("night_id")
-    if night_id is None:
-        night_id = await create_game_night(
-            data["date"], data["location"], message.from_user.id
-        )
-        await state.update_data(night_id=night_id)
-
-    await add_session(
-        night_id,
-        data["game_id"],
-        data["time_start"],
-        data["time_end"],
-        slots,
-    )
-
-    date_display = data.get("date_display", data["date"])
-    text = (
-        f"✅ Добавлена игра «{game['title']}» "
-        f"({data['time_start']}–{data['time_end']}), мест: {slots}.\n\n"
-        f"Игротека: {date_display}, {data['location']}.\n\n"
-        f"Что дальше?"
-    )
-
-    await state.update_data(game_id=None, time_start=None, time_end=None, slots=None)
-    await state.set_state(CreateNight.searching_game)
-
-    from aiogram.utils.keyboard import InlineKeyboardBuilder
-    kb = InlineKeyboardBuilder()
-    kb.button(text="➕ Добавить ещё игру", callback_data="host_add_more")
-    kb.button(text="✅ Завершить создание", callback_data="host_finish")
-    kb.button(text="❌ Отмена", callback_data="host_cancel")
-    kb.adjust(1)
-
-    await message.answer(text, reply_markup=kb.as_markup())
+    await _finalize_session(message, state, slots, message.from_user.id)
 
 
 @router.callback_query(F.data == "host_add_more")
@@ -479,37 +449,6 @@ async def host_cancel(call: CallbackQuery, state: FSMContext) -> None:
     await call.message.edit_text(
         "Создание игротеки отменено.",
         reply_markup=main_menu(is_host, call.from_user.id),
-    )
-    await call.answer()
-
-
-# ============ СПИСОК ИГРОТЕК ============
-
-@router.callback_query(F.data == "host_manage_list")
-async def manage_list(call: CallbackQuery) -> None:
-    if not await _is_host_or_admin(call.from_user.id):
-        await call.answer("Только для организаторов", show_alert=True)
-        return
-
-    nights = await list_all_upcoming_nights()
-    if not nights:
-        await call.message.edit_text(
-            "Нет предстоящих игротек.",
-            reply_markup=host_menu(),
-        )
-        await call.answer()
-        return
-
-    # «Свои» — только те, где host_telegram_id == текущий пользователь.
-    # Для админа чужие игротеки остаются с 👀, хотя он может ими управлять.
-    own_ids = {
-        n["id"] for n in nights
-        if n["host_telegram_id"] == call.from_user.id
-    }
-
-    await call.message.edit_text(
-        "Предстоящие игротеки:",
-        reply_markup=host_nights_list(nights, own_ids),
     )
     await call.answer()
 
@@ -849,17 +788,54 @@ async def night_delete_confirm_yes(call: CallbackQuery) -> None:
     if not nights:
         await call.message.edit_text(
             "✅ Игротека удалена.\n\nПредстоящих игротек больше нет.",
-            reply_markup=host_menu(),
+            reply_markup=host_menu_empty(),
         )
     else:
         await call.message.edit_text(
-            "✅ Игротека удалена.\n\nПредстоящие игротеки:",
-            reply_markup=host_nights_list(nights, own_ids),
+            "✅ Игротека удалена.\n\n"
+            "Выберите игротеку или создайте новую:",
+            reply_markup=host_menu_with_nights(nights, own_ids),
         )
     await call.answer("Игротека удалена")
 
 
 # ============ ДОБАВЛЕНИЕ ИГРЫ В ИГРОТЕКУ ============
+
+async def _finalize_add_session(message, state: FSMContext,
+                                slots: int, user_id: int) -> None:
+    data = await state.get_data()
+    night_id = data["night_id"]
+    game_id = data["game_id"]
+
+    await add_session(
+        night_id,
+        game_id,
+        data["time_start"],
+        data["time_end"],
+        slots,
+    )
+    await state.clear()
+
+    game = await get_game(game_id)
+    night = await get_night(night_id)
+    can_manage = await _can_manage_night(user_id, night)
+    sessions = await get_night_sessions_for_edit(night_id)
+
+    if can_manage:
+        text = (
+            f"✅ Игра «{game['title']}» добавлена в игротеку.\n"
+            f"📅 {_fmt_date(night['date'])} • {night['location']}\n\n"
+            f"Нажмите 🗑 на игре, чтобы удалить её, "
+            f"или ➕, чтобы добавить ещё:"
+        )
+        await message.answer(text, reply_markup=host_sessions_list(night_id, sessions))
+    else:
+        await message.answer(
+            f"✅ Игра «{game['title']}» добавлена в игротеку "
+            f"{_fmt_date(night['date'])} ({night['location']}).",
+            reply_markup=host_night_card(night_id, is_owner=False),
+        )
+
 
 @router.callback_query(F.data.startswith("hn_add:"))
 async def add_game_start(call: CallbackQuery, state: FSMContext) -> None:
