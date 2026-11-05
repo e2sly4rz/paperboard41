@@ -84,7 +84,6 @@ def my_games_list(regs: list[dict]) -> InlineKeyboardMarkup:
 
 def host_menu_with_nights(nights: list[dict],
                           own_ids: set[int] | None = None) -> InlineKeyboardMarkup:
-    """Меню организатора: кнопка создания + сразу список игротек."""
     kb = InlineKeyboardBuilder()
     kb.button(text="➕ Создать игротеку", callback_data="host_create")
 
@@ -103,7 +102,6 @@ def host_menu_with_nights(nights: list[dict],
 
 
 def host_menu_empty() -> InlineKeyboardMarkup:
-    """Меню организатора, когда игротек нет."""
     kb = InlineKeyboardBuilder()
     kb.button(text="➕ Создать игротеку", callback_data="host_create")
     kb.button(text="⬅️ Назад", callback_data="back_main")
@@ -126,13 +124,27 @@ def host_night_card(night_id: int, is_owner: bool = True) -> InlineKeyboardMarku
     return kb.as_markup()
 
 
-def host_sessions_list(night_id: int, sessions: list[dict]) -> InlineKeyboardMarkup:
+def host_sessions_list(night_id: int, sessions: list[dict],
+                       can_delete_all: bool = False,
+                       user_id: int | None = None) -> InlineKeyboardMarkup:
+    """Список сессий для управления.
+
+    can_delete_all = True → 🗑 на всех (владелец игротеки или админ).
+    Иначе 🗑 только на сессиях, где created_by_user_id == user_id,
+    а на остальных — •, нажатие ведёт в noop с алертом.
+    """
     kb = InlineKeyboardBuilder()
     for s in sessions:
+        can_delete = (
+            can_delete_all
+            or (user_id is not None and s.get("created_by_user_id") == user_id)
+        )
+        prefix = "🗑" if can_delete else "•"
+        callback = f"hs_del:{s['id']}" if can_delete else "noop"
         kb.button(
-            text=f"🗑 {s['time_start']} — {s['game_title']} "
+            text=f"{prefix} {s['time_start']} — {s['game_title']} "
                  f"({s['slots_taken']}/{s['max_slots']})",
-            callback_data=f"hs_del:{s['id']}",
+            callback_data=callback,
         )
     kb.button(text="➕ Добавить игру", callback_data=f"hn_add:{night_id}")
     kb.button(text="⬅️ К игротеке", callback_data=f"hn:{night_id}")
@@ -203,7 +215,6 @@ def search_prompt_keyboard(cancel_callback: str) -> InlineKeyboardMarkup:
 # ---------- Ввод времени и мест ----------
 
 def time_start_picker() -> InlineKeyboardMarkup:
-    """Кнопки времени начала с шагом 1 час: 10:00, 11:00, …, 23:00."""
     kb = InlineKeyboardBuilder()
     for hour in range(10, 24):
         t = f"{hour:02d}:00"
@@ -214,7 +225,6 @@ def time_start_picker() -> InlineKeyboardMarkup:
 
 
 def duration_picker(game: dict) -> InlineKeyboardMarkup:
-    """Кнопки длительности с шагом 1 час, с подсказками из карточки игры."""
     kb = InlineKeyboardBuilder()
     dmin = game.get("duration_min") or 0
     dmax = game.get("duration_max") or 999
@@ -233,7 +243,6 @@ def duration_picker(game: dict) -> InlineKeyboardMarkup:
 
 def slots_picker_autofill(game: dict,
                           default_slots: int) -> InlineKeyboardMarkup:
-    """Автоподстановка рекомендуемого количества мест."""
     kb = InlineKeyboardBuilder()
 
     kb.button(

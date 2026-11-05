@@ -13,18 +13,6 @@ CREATE TABLE IF NOT EXISTS users (
     created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS notifications_log (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id    INTEGER NOT NULL,
-    date       DATE NOT NULL,
-    kind       TEXT NOT NULL,
-    sent_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(telegram_id)
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_notif_unique
-    ON notifications_log(user_id, date, kind);
-
 CREATE TABLE IF NOT EXISTS games (
     id                 INTEGER PRIMARY KEY AUTOINCREMENT,
     title              TEXT NOT NULL,
@@ -50,15 +38,17 @@ CREATE TABLE IF NOT EXISTS game_nights (
 );
 
 CREATE TABLE IF NOT EXISTS game_sessions (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    game_night_id INTEGER NOT NULL,
-    game_id       INTEGER NOT NULL,
-    time_start    TEXT NOT NULL,
-    time_end      TEXT,
-    max_slots     INTEGER NOT NULL,
-    slots_taken   INTEGER DEFAULT 0,
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    game_night_id      INTEGER NOT NULL,
+    game_id            INTEGER NOT NULL,
+    time_start         TEXT NOT NULL,
+    time_end           TEXT,
+    max_slots          INTEGER NOT NULL,
+    slots_taken        INTEGER DEFAULT 0,
+    created_by_user_id INTEGER,
     FOREIGN KEY (game_night_id) REFERENCES game_nights(id) ON DELETE CASCADE,
-    FOREIGN KEY (game_id)       REFERENCES games(id)
+    FOREIGN KEY (game_id)       REFERENCES games(id),
+    FOREIGN KEY (created_by_user_id) REFERENCES users(telegram_id)
 );
 
 CREATE TABLE IF NOT EXISTS registrations (
@@ -70,6 +60,15 @@ CREATE TABLE IF NOT EXISTS registrations (
     FOREIGN KEY (user_telegram_id) REFERENCES users(telegram_id)
 );
 
+CREATE TABLE IF NOT EXISTS notifications_log (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL,
+    date       DATE NOT NULL,
+    kind       TEXT NOT NULL,
+    sent_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(telegram_id)
+);
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_session_user
     ON registrations(session_id, user_telegram_id);
 
@@ -78,6 +77,9 @@ CREATE INDEX IF NOT EXISTS idx_sessions_night
 
 CREATE INDEX IF NOT EXISTS idx_games_owner
     ON games(owner_user_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_notif_unique
+    ON notifications_log(user_id, date, kind);
 """
 
 
@@ -98,8 +100,17 @@ async def _run_migrations(db: aiosqlite.Connection) -> None:
             "ALTER TABLE games ADD COLUMN owner_user_id INTEGER"
         )
 
+    if not await _column_exists(db, "game_sessions", "created_by_user_id"):
+        await db.execute(
+            "ALTER TABLE game_sessions ADD COLUMN created_by_user_id INTEGER"
+        )
+
     await db.execute(
         "CREATE INDEX IF NOT EXISTS idx_games_owner ON games(owner_user_id)"
+    )
+    await db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sessions_created_by "
+        "ON game_sessions(created_by_user_id)"
     )
 
     await db.commit()

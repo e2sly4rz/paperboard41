@@ -105,11 +105,6 @@ async def get_game(game_id: int) -> dict | None:
 
 
 async def search_games(query: str, limit: int = 10) -> list[dict]:
-    """Гибкий поиск без изменений схемы БД.
-
-    Регистронезависимый (включая кириллицу), многословный в любом порядке,
-    с ранжированием: точное совпадение → начало названия → слово целиком → в середине.
-    """
     q = query.strip().lower()
     if not q:
         return []
@@ -165,13 +160,16 @@ async def create_game_night(date: str, location: str,
 
 
 async def add_session(game_night_id: int, game_id: int, time_start: str,
-                      time_end: str | None, max_slots: int) -> int:
+                      time_end: str | None, max_slots: int,
+                      created_by_user_id: int | None = None) -> int:
     async with aiosqlite.connect(DB_PATH) as db:
         cur = await db.execute(
             """INSERT INTO game_sessions
-               (game_night_id, game_id, time_start, time_end, max_slots)
-               VALUES (?, ?, ?, ?, ?)""",
-            (game_night_id, game_id, time_start, time_end, max_slots),
+               (game_night_id, game_id, time_start, time_end, max_slots,
+                created_by_user_id)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (game_night_id, game_id, time_start, time_end, max_slots,
+             created_by_user_id),
         )
         await db.commit()
         return cur.lastrowid
@@ -193,7 +191,6 @@ async def list_upcoming_nights() -> list[dict]:
 
 
 async def list_all_upcoming_nights() -> list[dict]:
-    """Все будущие игротеки — для меню хоста."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
@@ -246,6 +243,16 @@ async def get_session(session_id: int) -> dict | None:
         )
         row = await cur.fetchone()
         return dict(row) if row else None
+
+
+async def get_session_author(session_id: int) -> int | None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT created_by_user_id FROM game_sessions WHERE id = ?",
+            (session_id,),
+        )
+        row = await cur.fetchone()
+        return row[0] if row else None
 
 
 # ---------- Записи на игры ----------
@@ -344,24 +351,6 @@ async def cancel_registration(reg_id: int, user_id: int) -> bool:
 
 # ---------- Управление игротеками ----------
 
-async def list_host_nights(host_telegram_id: int) -> list[dict]:
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute(
-            """SELECT gn.id, gn.date, gn.location,
-                      COUNT(gs.id) AS sessions_count,
-                      COALESCE(SUM(gs.slots_taken), 0) AS total_taken
-               FROM game_nights gn
-               LEFT JOIN game_sessions gs ON gs.game_night_id = gn.id
-               WHERE gn.host_telegram_id = ?
-                 AND gn.date >= date('now')
-               GROUP BY gn.id
-               ORDER BY gn.date""",
-            (host_telegram_id,),
-        )
-        return [dict(r) for r in await cur.fetchall()]
-
-
 async def get_night(night_id: int) -> dict | None:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
@@ -385,6 +374,7 @@ async def get_night_sessions_for_edit(night_id: int) -> list[dict]:
         cur = await db.execute(
             """SELECT gs.id, gs.time_start, gs.time_end,
                       gs.max_slots, gs.slots_taken,
+                      gs.created_by_user_id,
                       g.title AS game_title
                FROM game_sessions gs
                JOIN games g ON g.id = gs.game_id
@@ -460,49 +450,12 @@ async def get_all_night_registrations(night_id: int) -> list[dict]:
         )
         return [dict(r) for r in await cur.fetchall()]
 
+
 # ---------- Напоминания ----------
-
-async def list_sessions_with_registrations_for_notify() -> list[dict]:
-    """Сессии на ближайшие 2 дня, у которых есть записавшиеся.
-
-    Возвращает плоский список: одна строка = (сессия, участник).
-    Фильтр по дате — только сегодня и завтра, чтобы не тянуть всю БД.
-    """
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute(
-            """SELECT gs.id           AS session_id,
-                      gs.time_start,
-                      gs.time_end,
-                      gs.max_slots,
-                      gs.slots_taken,
-                      g.title          AS game_title,
-                      gn.id            AS night_id,
-                      gn.date,
-                      gn.location,
-                      u.telegram_id,
-                      u.username,
-                      u.first_name
-               FROM game_sessions gs
-               JOIN game_nights gn ON gn.id = gs.game_night_id
-               JOIN games       g  ON g.id  = gs.game_id
-               JOIN registrations r ON r.session_id = gs.id
-               JOIN users       u  ON u.telegram_id = r.user_telegram_id
-               WHERE gn.date >= date('now')
-                 AND gn.date <= date('now', '+1 day')
-               ORDER BY gn.date, gs.time_start""",
-        )
-        return [dict(r) for r in await cur.fetchall()]
-
 
 async def get_user_day_registrations(
     date_from: str, date_to: str
 ) -> list[dict]:
-    """Все записи на игры в диапазоне дат.
-
-    Возвращает плоский список строк (пользователь × игра).
-    Группировка по (user, date) — на стороне scheduler.
-    """
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
@@ -526,7 +479,6 @@ async def get_user_day_registrations(
             (date_from, date_to),
         )
         return [dict(r) for r in await cur.fetchall()]
-
 
 
 async def was_day_notification_sent(user_id: int, date: str,

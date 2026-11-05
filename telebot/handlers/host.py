@@ -16,6 +16,7 @@ from database.queries import (
     list_all_upcoming_nights,
     get_night,
     get_night_sessions_for_edit,
+    get_session_author,
     update_night_date,
     update_night_location,
     delete_night,
@@ -61,6 +62,18 @@ async def _can_manage_night(user_id: int, night: dict | None) -> bool:
     if is_admin(user_id):
         return True
     return night["host_telegram_id"] == user_id
+
+
+async def _can_delete_session(user_id: int, session_id: int,
+                              night: dict | None) -> bool:
+    if night is None:
+        return False
+    if is_admin(user_id):
+        return True
+    if night["host_telegram_id"] == user_id:
+        return True
+    author_id = await get_session_author(session_id)
+    return author_id is not None and author_id == user_id
 
 
 def _fmt_date(iso_date: str) -> str:
@@ -132,6 +145,7 @@ async def _finalize_session(message, state: FSMContext,
         data["time_start"],
         data["time_end"],
         slots,
+        created_by_user_id=user_id,
     )
 
     date_display = data.get("date_display", data["date"])
@@ -633,15 +647,36 @@ async def save_location(message: Message, state: FSMContext) -> None:
 
 # ============ УПРАВЛЕНИЕ ИГРАМИ ============
 
+@router.callback_query(F.data == "noop")
+async def noop(call: CallbackQuery) -> None:
+    await call.answer(
+        "Эту игру добавил другой хост. Удалить её может только он "
+        "или владелец игротеки.",
+        show_alert=True,
+    )
+
+
 @router.callback_query(F.data.startswith("hn_sessions:"))
 async def sessions_manage(call: CallbackQuery) -> None:
     night_id = int(call.data.split(":")[1])
     night = await get_night(night_id)
-    if not await _can_manage_night(call.from_user.id, night):
-        await call.answer("Нет доступа", show_alert=True)
+    if not night:
+        await call.answer("Игротека не найдена", show_alert=True)
         return
 
+    can_manage = await _can_manage_night(call.from_user.id, night)
     sessions = await get_night_sessions_for_edit(night_id)
+
+    # Если не владелец — пускаем только если есть хотя бы одна своя сессия
+    if not can_manage:
+        has_authored = any(
+            s.get("created_by_user_id") == call.from_user.id
+            for s in sessions
+        )
+        if not has_authored:
+            await call.answer("Нет доступа", show_alert=True)
+            return
+
     if not sessions:
         await call.message.edit_text(
             f"🎲 Игротека\n"
@@ -650,7 +685,7 @@ async def sessions_manage(call: CallbackQuery) -> None:
             f"Игр: 0\n"
             f"Записей: 0\n\n"
             f"В игротеке пока нет игр. Добавьте первую.",
-            reply_markup=host_night_card(night_id, is_owner=True),
+            reply_markup=host_night_card(night_id, is_owner=can_manage),
         )
         await call.answer()
         return
@@ -658,7 +693,11 @@ async def sessions_manage(call: CallbackQuery) -> None:
     await call.message.edit_text(
         "Нажмите 🗑 на игре, чтобы удалить её из игротеки, "
         "или ➕, чтобы добавить новую:",
-        reply_markup=host_sessions_list(night_id, sessions),
+        reply_markup=host_sessions_list(
+            night_id, sessions,
+            can_delete_all=can_manage,
+            user_id=call.from_user.id,
+        ),
     )
     await call.answer()
 
@@ -670,7 +709,8 @@ async def session_delete_confirm(call: CallbackQuery) -> None:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
-            """SELECT gs.game_night_id, gs.slots_taken, g.title
+            """SELECT gs.game_night_id, gs.slots_taken,
+                      gs.created_by_user_id, g.title
                FROM game_sessions gs
                JOIN games g ON g.id = gs.game_id
                WHERE gs.id = ?""",
@@ -684,9 +724,15 @@ async def session_delete_confirm(call: CallbackQuery) -> None:
 
     night_id = row["game_night_id"]
     night = await get_night(night_id)
-    if not await _can_manage_night(call.from_user.id, night):
+    if not await _can_delete_session(call.from_user.id, session_id, night):
         await call.answer("Нет доступа", show_alert=True)
         return
+
+    is_owner = (
+        night["host_telegram_id"] == call.from_user.id
+        or is_admin(call.from_user.id)
+    )
+    is_author = row["created_by_user_id"] == call.from_user.id
 
     warning = ""
     if row["slots_taken"] > 0:
@@ -694,9 +740,15 @@ async def session_delete_confirm(call: CallbackQuery) -> None:
             f"\n\n⚠️ На игру записано {row['slots_taken']} чел. "
             f"Их записи будут удалены без уведомления."
         )
+    if is_author and not is_owner:
+        warning += (
+            "\n\n<i>Вы добавляли эту игру в чужую игротеку. "
+            "Владелец игротеки не будет уведомлён об удалении.</i>"
+        )
 
     await call.message.edit_text(
         f"Удалить игру «{row['title']}» из игротеки?{warning}",
+        parse_mode="HTML",
         reply_markup=confirm_delete_session(session_id, night_id),
     )
     await call.answer()
@@ -720,22 +772,27 @@ async def session_delete_confirm_yes(call: CallbackQuery) -> None:
 
     night_id = row["game_night_id"]
     night = await get_night(night_id)
-    if not await _can_manage_night(call.from_user.id, night):
+    if not await _can_delete_session(call.from_user.id, session_id, night):
         await call.answer("Нет доступа", show_alert=True)
         return
 
     await delete_session(session_id)
 
+    can_manage = await _can_manage_night(call.from_user.id, night)
     sessions = await get_night_sessions_for_edit(night_id)
     if not sessions:
         await call.message.edit_text(
             "Все игры удалены. В игротеке больше нет сессий.",
-            reply_markup=host_night_card(night_id, is_owner=True),
+            reply_markup=host_night_card(night_id, is_owner=can_manage),
         )
     else:
         await call.message.edit_text(
             "✅ Игра удалена.\n\nНажмите на игру, чтобы удалить её из игротеки:",
-            reply_markup=host_sessions_list(night_id, sessions),
+            reply_markup=host_sessions_list(
+                night_id, sessions,
+                can_delete_all=can_manage,
+                user_id=call.from_user.id,
+            ),
         )
     await call.answer("Игра удалена")
 
@@ -813,6 +870,7 @@ async def _finalize_add_session(message, state: FSMContext,
         data["time_start"],
         data["time_end"],
         slots,
+        created_by_user_id=user_id,
     )
     await state.clear()
 
@@ -825,10 +883,17 @@ async def _finalize_add_session(message, state: FSMContext,
         text = (
             f"✅ Игра «{game['title']}» добавлена в игротеку.\n"
             f"📅 {_fmt_date(night['date'])} • {night['location']}\n\n"
-            f"Нажмите 🗑 на игре, чтобы удалить её, "
-            f"или ➕, чтобы добавить ещё:"
+            "Нажмите 🗑 на игре, чтобы удалить её, "
+            "или ➕, чтобы добавить ещё:"
         )
-        await message.answer(text, reply_markup=host_sessions_list(night_id, sessions))
+        await message.answer(
+            text,
+            reply_markup=host_sessions_list(
+                night_id, sessions,
+                can_delete_all=True,
+                user_id=user_id,
+            ),
+        )
     else:
         await message.answer(
             f"✅ Игра «{game['title']}» добавлена в игротеку "
