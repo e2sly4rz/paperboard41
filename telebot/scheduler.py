@@ -13,18 +13,12 @@ from database.queries import (
     was_day_notification_sent,
     log_day_notification,
 )
+from utils import fmt_date
 
 
 _TZ = ZoneInfo(CLUB_TIMEZONE)
 
 scheduler = AsyncIOScheduler()
-
-
-def _fmt_date(iso_date: str) -> str:
-    try:
-        return datetime.strptime(iso_date, "%Y-%m-%d").strftime("%d.%m.%Y")
-    except (ValueError, TypeError):
-        return iso_date or "—"
 
 
 def _session_datetime(iso_date: str, time_str: str) -> datetime | None:
@@ -39,13 +33,12 @@ def _session_datetime(iso_date: str, time_str: str) -> datetime | None:
 
 def _build_group_message(kind: str, date: str, location: str,
                          games: list[dict]) -> str:
-    """Одно сообщение на день с полным списком игр."""
     when = "завтра" if kind == "day_before" else "через час"
     icon = "📅" if kind == "day_before" else "⏰"
 
     lines = [
-        f"{icon} <b>Напоминание: {when} игротека</b>",
-        f"{_fmt_date(date)} • {location}",
+        f"{icon} <b>Напоминание: игра {when}</b>",
+        f"📅 {fmt_date(date)} • {location}",
         "",
         "<b>Вы записаны на:</b>",
     ]
@@ -76,27 +69,17 @@ async def _notify_user(bot: Bot, user_id: int, text: str) -> bool:
 
 
 async def check_and_send_reminders(bot: Bot) -> None:
-    """Группирует записи по (user, date) и отправляет одно напоминание
-    на день, беря время самой ранней игры.
-
-    Окна:
-      day_before  — 23–25 часов до первой игры дня
-      hour_before — 50–70 минут до первой игры дня
-    """
     now = datetime.now(_TZ)
-
     today = now.date().isoformat()
     tomorrow = (now.date() + timedelta(days=1)).isoformat()
 
     rows = await get_user_day_registrations(today, tomorrow)
 
-    # Группируем: (user_id, date) → список игр
     groups: dict[tuple[int, str], list[dict]] = defaultdict(list)
     for row in rows:
         groups[(row["telegram_id"], row["date"])].append(row)
 
     for (user_id, date), games in groups.items():
-        # Сортируем по времени начала — первая запись в списке самая ранняя
         games.sort(key=lambda g: g["time_start"])
         earliest = games[0]
 

@@ -30,7 +30,8 @@ async def cmd_start(message: Message) -> None:
         await message.answer(
             f"👑 <b>Добро пожаловать, {u.first_name}!</b>\n\n"
             f"Вы администратор клуба «{CLUB_NAME}».\n"
-            f"Заявок на доступ: <b>{len(pending)}</b>\n\n",
+            f"Заявок на доступ: <b>{len(pending)}</b>\n\n"
+            f"Список команд — в разделе «❓ Справка по командам».",
             reply_markup=main_menu(True, u.id),
         )
         return
@@ -38,7 +39,7 @@ async def cmd_start(message: Message) -> None:
     if not user["is_approved"]:
         await message.answer(
             f"⏳ <b>Заявка отправлена</b>\n\n"
-            f"Организатор клуба увидит её "
+            f"Организатор клуба «{CLUB_NAME}» увидит её "
             f"и подтвердит доступ.\n\n"
             f"Ваш ID: <code>{u.id}</code>"
         )
@@ -55,9 +56,9 @@ async def cmd_start(message: Message) -> None:
             pass
         return
 
-    is_host = user["subscriber_level"] == "host"
+    is_host_user = user["subscriber_level"] == "host"
 
-    if is_host:
+    if is_host_user:
         await message.answer(
             f"🎩 <b>Привет, {u.first_name}!</b>\n\n"
             f"Добро пожаловать в клуб «{CLUB_NAME}».\n\n"
@@ -88,13 +89,13 @@ async def cmd_start(message: Message) -> None:
 @router.callback_query(F.data == "back_main")
 async def back_main(call: CallbackQuery) -> None:
     user = await get_user(call.from_user.id)
-    is_host = (
+    is_host_user = (
         bool(user and user["subscriber_level"] == "host")
         or is_admin(call.from_user.id)
     )
     await call.message.edit_text(
         "Главное меню:",
-        reply_markup=main_menu(is_host, call.from_user.id),
+        reply_markup=main_menu(is_host_user, call.from_user.id),
     )
     await call.answer()
 
@@ -112,7 +113,7 @@ ADMIN_HELP_TEXT = (
     "<b>Управление ролями</b>\n"
     "<code>/grant &lt;id&gt; host</code> — сделать организатором\n"
     "<code>/grant &lt;id&gt; provodnik</code> — выдать «Проводника»\n"
-    "<code>/grant &lt;id&gt; guest</code> — снять привилегии\n\n"
+    "<code>/grant &lt;id&gt; passenger</code> — сделать пассажиром\n\n"
 
     "<b>Прочее</b>\n"
     "<code>/start</code> — главное меню\n"
@@ -227,7 +228,7 @@ async def grant_role(message: Message) -> None:
     parts = message.text.split()
     if len(parts) != 3:
         await message.answer(
-            "Использование: /grant <telegram_id> host|provodnik|guest"
+            "Использование: /grant <telegram_id> host|provodnik|passenger"
         )
         return
     try:
@@ -236,8 +237,10 @@ async def grant_role(message: Message) -> None:
         await message.answer("telegram_id должен быть числом.")
         return
     level = parts[2]
-    if level not in ("host", "provodnik", "guest"):
-        await message.answer("Уровень должен быть host, provodnik или guest.")
+    if level not in ("host", "provodnik", "passenger"):
+        await message.answer(
+            "Уровень должен быть host, provodnik или passenger."
+        )
         return
     await set_user_level(target_id, level)
     await message.answer(f"Пользователю {target_id} установлен уровень {level}.")

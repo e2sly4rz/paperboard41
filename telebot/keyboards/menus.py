@@ -13,6 +13,13 @@ def _fmt_date(iso_date: str) -> str:
         return iso_date or "—"
 
 
+def _short_title(title: str, max_len: int = 28) -> str:
+    """Обрезает длинное название с многоточием."""
+    if len(title) <= max_len:
+        return title
+    return title[:max_len - 1].rstrip() + "…"
+
+
 def main_menu(is_host: bool, user_id: int | None = None) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.button(text="📅 Расписание", callback_data="schedule")
@@ -46,13 +53,32 @@ def nights_list(nights: list[dict]) -> InlineKeyboardMarkup:
 
 
 def sessions_list(night_id: int, sessions: list[dict]) -> InlineKeyboardMarkup:
+    """Список игр — каждая игра одной кнопкой с полной информацией.
+
+    Формат: <маркер> <🔒> <время> · <название> · <занято>/<всего>
+    """
     kb = InlineKeyboardBuilder()
     for s in sessions:
         lock = "🔒 " if s["is_subscriber_only"] else ""
+        taken = s["max_slots"] - s["free_slots"]
+        free = s["free_slots"]
+
+        if free <= 0:
+            marker = "🔴 "
+        elif free == 1:
+            marker = "🟡 "
+        elif free == 2:
+            marker = "🟠 "
+        else:
+            marker = "🟢 "
+
+        title = _short_title(s["title"])
         kb.button(
-            text=f"{lock}{s['title']}",
+            text=f"{marker}{lock}{s['time_start']} · {title} · "
+                 f"{taken}/{s['max_slots']}",
             callback_data=f"session:{s['id']}",
         )
+
     kb.button(text="⬅️ К расписанию", callback_data="schedule")
     kb.adjust(1)
     return kb.as_markup()
@@ -127,12 +153,6 @@ def host_night_card(night_id: int, is_owner: bool = True) -> InlineKeyboardMarku
 def host_sessions_list(night_id: int, sessions: list[dict],
                        can_delete_all: bool = False,
                        user_id: int | None = None) -> InlineKeyboardMarkup:
-    """Список сессий для управления.
-
-    can_delete_all = True → 🗑 на всех (владелец игротеки или админ).
-    Иначе 🗑 только на сессиях, где created_by_user_id == user_id,
-    а на остальных — •, нажатие ведёт в noop с алертом.
-    """
     kb = InlineKeyboardBuilder()
     for s in sessions:
         can_delete = (

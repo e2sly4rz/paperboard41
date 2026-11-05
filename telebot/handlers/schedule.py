@@ -1,10 +1,9 @@
-from datetime import datetime
-
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
 
 from database.queries import (
     list_upcoming_nights,
+    get_night,
     get_night_sessions,
     get_session,
     register_for_session,
@@ -16,49 +15,19 @@ from keyboards.menus import (
     session_card,
     main_menu,
 )
-from utils import is_admin
+from utils import is_host_or_admin, fmt_date
 
 router = Router()
-
-def _session_status(s: dict) -> str:
-    """Эмодзи-маркер по заполненности.
-
-    🔴 — всё занято
-    🟠 — осталось ровно одно место
-    🟡 — осталось два места
-    🟢 — есть места
-    """
-    free = s["free_slots"]
-    if free <= 0:
-        return "🔴"
-    if free == 1:
-        return "🟠"
-    if free == 2:
-        return "🟡"
-    return "🟢"
-
-def _fmt_date(iso_date: str) -> str:
-    try:
-        return datetime.strptime(iso_date, "%Y-%m-%d").strftime("%d.%m.%Y")
-    except (ValueError, TypeError):
-        return iso_date or "—"
-
-
-async def _is_host_or_admin(user_id: int) -> bool:
-    if is_admin(user_id):
-        return True
-    user = await get_user(user_id)
-    return bool(user and user["subscriber_level"] == "host")
 
 
 @router.callback_query(F.data == "schedule")
 async def show_schedule(call: CallbackQuery) -> None:
     nights = await list_upcoming_nights()
-    is_host = await _is_host_or_admin(call.from_user.id)
+    is_host_user = await is_host_or_admin(call.from_user.id)
     if not nights:
         await call.message.edit_text(
             "Пока нет запланированных игротек.",
-            reply_markup=main_menu(is_host, call.from_user.id),
+            reply_markup=main_menu(is_host_user, call.from_user.id),
         )
         await call.answer()
         return
@@ -82,19 +51,15 @@ async def show_night(call: CallbackQuery) -> None:
         await call.answer()
         return
 
-    blocks = ["🎲 <b>Игры игротеки:</b>"]
-    for s in sessions:
-        taken = s["max_slots"] - s["free_slots"]
-        marker = _session_status(s)
-        lock = " 🔒" if s["is_subscriber_only"] else ""
-        blocks.append(
-            f"{marker} <b>{s['time_start']}–{s['time_end'] or '?'}</b>\n"
-            f"   {s['title']}{lock}\n"
-            f"   занято {taken} из {s['max_slots']}"
-        )
+    night = await get_night(night_id)
+    header = (
+        f"🎲 <b>Игротека {fmt_date(night['date'])}</b>\n"
+        f"📍 {night['location']}\n"
+        f"Игр: {night['sessions_count']} • Записей: {night['total_taken']}"
+    )
 
     await call.message.edit_text(
-        "\n\n".join(blocks),
+        header,
         parse_mode="HTML",
         reply_markup=sessions_list(night_id, sessions),
     )
@@ -110,7 +75,7 @@ async def show_session(call: CallbackQuery) -> None:
         return
 
     user = await get_user(call.from_user.id)
-    level = user["subscriber_level"] if user else "guest"
+    level = user["subscriber_level"] if user else "passenger"
     can_register = (
         s["free_slots"] > 0
         and (not s["is_subscriber_only"] or level in ("provodnik", "host"))
@@ -119,7 +84,7 @@ async def show_session(call: CallbackQuery) -> None:
     taken = s["max_slots"] - s["free_slots"]
     text = (
         f"🎲 <b>{s['title']}</b>\n"
-        f"Дата: {_fmt_date(s['date'])}\n"
+        f"Дата: {fmt_date(s['date'])}\n"
         f"Время: {s['time_start']}–{s['time_end'] or '?'}\n"
         f"Место: {s['location']}\n"
         f"Занято мест: {taken} из {s['max_slots']}\n"
@@ -149,7 +114,7 @@ async def do_register(call: CallbackQuery) -> None:
         taken = s["max_slots"] - s["free_slots"]
         text = (
             f"🎲 <b>{s['title']}</b>\n"
-            f"Дата: {_fmt_date(s['date'])}\n"
+            f"Дата: {fmt_date(s['date'])}\n"
             f"Время: {s['time_start']}–{s['time_end'] or '?'}\n"
             f"Место: {s['location']}\n"
             f"Занято мест: {taken} из {s['max_slots']}\n"

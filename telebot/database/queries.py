@@ -30,6 +30,8 @@ async def get_user(telegram_id: int) -> dict | None:
 
 
 async def set_user_level(telegram_id: int, level: str) -> None:
+    if level not in ("host", "provodnik", "passenger"):
+        raise ValueError(f"Недопустимый уровень: {level}")
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
             "UPDATE users SET subscriber_level = ? WHERE telegram_id = ?",
@@ -123,13 +125,11 @@ async def search_games(query: str, limit: int = 10) -> list[dict]:
         games = [dict(r) for r in await cur.fetchall()]
 
     words = [w for w in q.split() if w]
-
     scored: list[tuple[int, int, dict]] = []
     for g in games:
         title = (g["title"] or "").lower()
         if not all(w in title for w in words):
             continue
-
         if title == q:
             rank = 0
         elif title.startswith(q):
@@ -138,7 +138,6 @@ async def search_games(query: str, limit: int = 10) -> list[dict]:
             rank = 2
         else:
             rank = 3
-
         scored.append((rank, len(title), g))
 
     scored.sort(key=lambda x: (x[0], x[1], x[2]["title"]))
@@ -159,20 +158,40 @@ async def create_game_night(date: str, location: str,
         return cur.lastrowid
 
 
-async def add_session(game_night_id: int, game_id: int, time_start: str,
-                      time_end: str | None, max_slots: int,
-                      created_by_user_id: int | None = None) -> int:
+async def add_session(
+    game_night_id: int,
+    game_id: int,
+    time_start: str,
+    time_end: str | None,
+    max_slots: int,
+    created_by_user_id: int | None = None,
+    registration_opens_at: str | None = None,
+    registration_min_level: str = "passenger",
+    registration_approved: int = 1,
+) -> int:
     async with aiosqlite.connect(DB_PATH) as db:
         cur = await db.execute(
             """INSERT INTO game_sessions
                (game_night_id, game_id, time_start, time_end, max_slots,
-                created_by_user_id)
-               VALUES (?, ?, ?, ?, ?, ?)""",
+                created_by_user_id, registration_opens_at,
+                registration_min_level, registration_approved)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (game_night_id, game_id, time_start, time_end, max_slots,
-             created_by_user_id),
+             created_by_user_id, registration_opens_at,
+             registration_min_level, registration_approved),
         )
         await db.commit()
         return cur.lastrowid
+
+
+async def set_session_registration_approved(session_id: int,
+                                            approved: int) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE game_sessions SET registration_approved = ? WHERE id = ?",
+            (approved, session_id),
+        )
+        await db.commit()
 
 
 async def list_upcoming_nights() -> list[dict]:
@@ -214,6 +233,9 @@ async def get_night_sessions(night_id: int) -> list[dict]:
             """SELECT gs.id, gs.time_start, gs.time_end, gs.max_slots,
                       gs.slots_taken,
                       (gs.max_slots - gs.slots_taken) AS free_slots,
+                      gs.registration_opens_at,
+                      gs.registration_min_level,
+                      gs.registration_approved,
                       g.title, g.genre, g.min_players, g.max_players,
                       g.duration_min, g.duration_max, g.is_subscriber_only
                FROM game_sessions gs
@@ -265,6 +287,9 @@ async def register_for_session(session_id: int, user_id: int) -> tuple[bool, str
             db.row_factory = aiosqlite.Row
             cur = await db.execute(
                 """SELECT gs.max_slots, gs.slots_taken,
+                          gs.registration_opens_at,
+                          gs.registration_min_level,
+                          gs.registration_approved,
                           g.is_subscriber_only,
                           u.subscriber_level
                    FROM game_sessions gs
@@ -281,6 +306,12 @@ async def register_for_session(session_id: int, user_id: int) -> tuple[bool, str
             if row["is_subscriber_only"] and row["subscriber_level"] not in ("provodnik", "host"):
                 await db.rollback()
                 return False, "Эта игра доступна только подписчикам уровня «Проводник»."
+
+            # Проверка уровня регистрации: пока не реализована автозапись,
+            # эти флаги всегда дают доступ. Логика заложена на будущее.
+            if row["registration_min_level"] == "provodnik" and row["subscriber_level"] == "passenger":
+                await db.rollback()
+                return False, "Запись на эту игру доступна только с уровня «Проводник»."
 
             if row["slots_taken"] >= row["max_slots"]:
                 await db.rollback()
@@ -503,3 +534,72 @@ async def log_day_notification(user_id: int, date: str, kind: str) -> None:
             await db.commit()
         except aiosqlite.IntegrityError:
             pass
+
+
+# ---------- Опросы доступности ----------
+
+async def create_availability_poll(game_night_id: int,
+                                   created_by_user_id: int,
+                                   closes_at: str | None = None) -> int:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            """INSERT INTO availability_polls
+               (game_night_id, created_by_user_id, closes_at)
+               VALUES (?, ?, ?)""",
+            (game_night_id, created_by_user_id, closes_at),
+        )
+        await db.commit()
+        return cur.lastrowid
+
+
+async def get_active_poll_for_night(night_id: int) -> dict | None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            """SELECT * FROM availability_polls
+               WHERE game_night_id = ? AND status = 'open'
+               ORDER BY id DESC LIMIT 1""",
+            (night_id,),
+        )
+        row = await cur.fetchone()
+        return dict(row) if row else None
+
+
+async def upsert_availability_response(poll_id: int, user_id: int,
+                                       time_from: str, time_to: str) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT INTO availability_responses
+               (poll_id, user_id, time_from, time_to)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT(poll_id, user_id) DO UPDATE SET
+                   time_from = excluded.time_from,
+                   time_to   = excluded.time_to,
+                   created_at = CURRENT_TIMESTAMP""",
+            (poll_id, user_id, time_from, time_to),
+        )
+        await db.commit()
+
+
+async def list_availability_responses(poll_id: int) -> list[dict]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            """SELECT r.user_id, r.time_from, r.time_to, r.created_at,
+                      u.username, u.first_name, u.last_name
+               FROM availability_responses r
+               JOIN users u ON u.telegram_id = r.user_id
+               WHERE r.poll_id = ?
+               ORDER BY r.time_from""",
+            (poll_id,),
+        )
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def close_availability_poll(poll_id: int) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE availability_polls SET status = 'closed' WHERE id = ?",
+            (poll_id,),
+        )
+        await db.commit()
