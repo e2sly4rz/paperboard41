@@ -1,5 +1,7 @@
 from aiogram import Router, F
+from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from database.queries import (
     list_upcoming_nights,
@@ -8,13 +10,18 @@ from database.queries import (
     get_session,
     register_for_session,
     get_user,
+    get_active_poll_for_night,
+    upsert_availability_response,
 )
 from keyboards.menus import (
     nights_list,
     sessions_list,
     session_card,
     main_menu,
+    poll_time_grid,
+    poll_time_grid_after,
 )
+from states.states import PollTime
 from utils import is_host_or_admin, fmt_date
 
 router = Router()
@@ -52,16 +59,33 @@ async def show_night(call: CallbackQuery) -> None:
         return
 
     night = await get_night(night_id)
+    poll = await get_active_poll_for_night(night_id)
+
     header = (
         f"🎲 <b>Игротека {fmt_date(night['date'])}</b>\n"
         f"📍 {night['location']}\n"
         f"Игр: {night['sessions_count']} • Записей: {night['total_taken']}"
     )
+    if poll:
+        header += "\n\n📊 Хост собирает удобное время для игр."
+
+    kb = sessions_list(night_id, sessions)
+    if poll:
+        builder = InlineKeyboardBuilder()
+        builder.button(
+            text="⏰ Указать удобное время",
+            callback_data=f"poll_answer:{night_id}",
+        )
+        for row in kb.inline_keyboard:
+            for btn in row:
+                builder.button(text=btn.text, callback_data=btn.callback_data)
+        builder.adjust(1)
+        kb = builder.as_markup()
 
     await call.message.edit_text(
         header,
         parse_mode="HTML",
-        reply_markup=sessions_list(night_id, sessions),
+        reply_markup=kb,
     )
     await call.answer()
 
@@ -125,3 +149,63 @@ async def do_register(call: CallbackQuery) -> None:
             parse_mode="HTML",
             reply_markup=session_card(session_id, s["night_id"], False),
         )
+
+
+# ---------- Опрос о времени ----------
+
+@router.callback_query(F.data.startswith("poll_answer:"))
+async def poll_answer_start(call: CallbackQuery, state: FSMContext) -> None:
+    night_id = int(call.data.split(":")[1])
+    poll = await get_active_poll_for_night(night_id)
+    if not poll:
+        await call.answer("Опрос уже закрыт", show_alert=True)
+        return
+
+    await state.clear()
+    await state.set_state(PollTime.picking_from)
+    await state.update_data(poll_id=poll["id"], night_id=night_id)
+
+    await call.message.edit_text(
+        "⏰ <b>Когда вам удобно играть?</b>\n\n"
+        "Выберите час, с которого вы готовы начать:",
+        parse_mode="HTML",
+        reply_markup=poll_time_grid("pollfrom"),
+    )
+    await call.answer()
+
+
+@router.callback_query(PollTime.picking_from, F.data.startswith("pollfrom:"))
+async def poll_pick_from(call: CallbackQuery, state: FSMContext) -> None:
+    time_from = call.data.split(":", 1)[1]
+    await state.update_data(time_from=time_from)
+    await state.set_state(PollTime.picking_to)
+
+    await call.message.edit_text(
+        f"⏰ Начало: <b>{time_from}</b>\n\n"
+        f"Выберите час, до которого вы готовы играть:",
+        parse_mode="HTML",
+        reply_markup=poll_time_grid_after("pollto", after=time_from),
+    )
+    await call.answer()
+
+
+@router.callback_query(PollTime.picking_to, F.data.startswith("pollto:"))
+async def poll_pick_to(call: CallbackQuery, state: FSMContext) -> None:
+    time_to = call.data.split(":", 1)[1]
+    data = await state.get_data()
+
+    await upsert_availability_response(
+        data["poll_id"],
+        call.from_user.id,
+        data["time_from"],
+        time_to,
+    )
+    await state.clear()
+
+    await call.message.edit_text(
+        f"✅ Ваше время: <b>{data['time_from']}–{time_to}</b>\n\n"
+        "Спасибо! Хост увидит ваш ответ.",
+        parse_mode="HTML",
+        reply_markup=main_menu(False, call.from_user.id),
+    )
+    await call.answer()

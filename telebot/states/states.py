@@ -22,3 +22,7 @@ class AddSessionToNight(StatesGroup):
     time_start = State()
     time_end = State()
     slots = State()
+
+class PollTime(StatesGroup):
+    picking_from = State()
+    picking_to = State()

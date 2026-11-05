@@ -109,3 +109,24 @@ async def notify_game_owner_deleted(
         f"📍 {location}"
     )
     await _safe_send(bot, owner_id, text)
+
+async def notify_poll_created(
+    bot: Bot,
+    participants: list[dict],
+    initiator_id: int,
+    *,
+    night_date: str,
+    night_location: str,
+) -> None:
+    """Уведомляет записавшихся игроков, что хост создал опрос о времени."""
+    for p in participants:
+        user_id = p["telegram_id"]
+        if user_id == initiator_id:
+            continue
+        text = (
+            f"📊 <b>Хост собирает удобное время</b>\n\n"
+            f"📅 {fmt_date(night_date)} • {night_location}\n\n"
+            f"Откройте «📅 Расписание» → эту игротеку "
+            f"и нажмите «⏰ Указать удобное время»."
+        )
+        await _safe_send(bot, user_id, text)

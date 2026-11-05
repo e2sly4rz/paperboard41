@@ -562,3 +562,15 @@ async def close_availability_poll(poll_id: int) -> None:
         (poll_id,),
     )
     await db.conn.commit()
+
+async def get_night_participants(night_id: int) -> list[dict]:
+    """Уникальные пользователи, записанные хотя бы на одну игру игротеки."""
+    async with db.conn.execute(
+        """SELECT DISTINCT u.telegram_id, u.first_name, u.username
+           FROM registrations r
+           JOIN game_sessions gs ON gs.id = r.session_id
+           JOIN users u ON u.telegram_id = r.user_telegram_id
+           WHERE gs.game_night_id = ?""",
+        (night_id,),
+    ) as cur:
+        return [dict(r) for r in await cur.fetchall()]
