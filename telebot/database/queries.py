@@ -574,3 +574,36 @@ async def get_night_participants(night_id: int) -> list[dict]:
         (night_id,),
     ) as cur:
         return [dict(r) for r in await cur.fetchall()]
+
+async def list_all_users_grouped() -> dict:
+    """Список пользователей, сгруппированный по уровню.
+
+    Возвращает {
+        'host': [...],
+        'provodnik': [...],
+        'passenger': [...],
+        'pending': [...]  # is_approved = 0
+    }
+    """
+    async with db.conn.execute(
+        """SELECT telegram_id, username, first_name, last_name,
+                  subscriber_level, is_approved
+           FROM users
+           ORDER BY subscriber_level, first_name, username"""
+    ) as cur:
+        rows = [dict(r) for r in await cur.fetchall()]
+
+    groups = {
+        "host": [],
+        "provodnik": [],
+        "passenger": [],
+        "pending": [],
+    }
+    for r in rows:
+        if not r["is_approved"]:
+            groups["pending"].append(r)
+        else:
+            level = r["subscriber_level"]
+            if level in groups:
+                groups[level].append(r)
+    return groups

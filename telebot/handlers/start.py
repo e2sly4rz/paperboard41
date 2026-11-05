@@ -10,6 +10,7 @@ from database.queries import (
     approve_user,
     revoke_user,
     list_pending_users,
+    list_all_users_grouped,
 )
 from keyboards.menus import main_menu, admin_help_back
 from utils import is_admin
@@ -114,6 +115,9 @@ ADMIN_HELP_TEXT = (
     "<code>/grant &lt;id&gt; host</code> — сделать организатором\n"
     "<code>/grant &lt;id&gt; provodnik</code> — выдать «Проводника»\n"
     "<code>/grant &lt;id&gt; passenger</code> — сделать пассажиром\n\n"
+
+    "<b>Пользователи</b>\n"
+    "<code>/users</code> — список всех пользователей с уровнями\n\n"
 
     "<b>Прочее</b>\n"
     "<code>/start</code> — главное меню\n"
@@ -244,3 +248,51 @@ async def grant_role(message: Message) -> None:
         return
     await set_user_level(target_id, level)
     await message.answer(f"Пользователю {target_id} установлен уровень {level}.")
+
+@router.message(Command("users"))
+async def cmd_users(message: Message) -> None:
+    if not is_admin(message.from_user.id):
+        return
+
+    groups = await list_all_users_grouped()
+
+    def _fmt_user(u: dict) -> str:
+        name_parts = [u["first_name"] or "", u["last_name"] or ""]
+        name = " ".join(p for p in name_parts if p).strip() or "Без имени"
+        username = f" (@{u['username']})" if u["username"] else ""
+        return f"<code>{u['telegram_id']}</code> {name}{username}"
+
+    lines = []
+    total = sum(len(v) for v in groups.values())
+    lines.append(f"👥 <b>Пользователи ({total})</b>\n")
+
+    if groups["host"]:
+        lines.append(f"🎩 <b>Хосты ({len(groups['host'])}):</b>")
+        for u in groups["host"]:
+            lines.append(f"• {_fmt_user(u)}")
+        lines.append("")
+
+    if groups["provodnik"]:
+        lines.append(f"🔒 <b>Проводники ({len(groups['provodnik'])}):</b>")
+        for u in groups["provodnik"]:
+            lines.append(f"• {_fmt_user(u)}")
+        lines.append("")
+
+    if groups["passenger"]:
+        lines.append(f"🎲 <b>Пассажиры ({len(groups['passenger'])}):</b>")
+        for u in groups["passenger"]:
+            lines.append(f"• {_fmt_user(u)}")
+        lines.append("")
+
+    if groups["pending"]:
+        lines.append(f"⏳ <b>Ожидают одобрения ({len(groups['pending'])}):</b>")
+        for u in groups["pending"]:
+            lines.append(f"• {_fmt_user(u)}")
+        lines.append("")
+        lines.append("<i>Одобрить: /approve &lt;id&gt;</i>")
+
+    text = "\n".join(lines).strip()
+    if len(text) > 4000:
+        text = text[:3990] + "\n\n<i>…список обрезан</i>"
+
+    await message.answer(text, parse_mode="HTML")
