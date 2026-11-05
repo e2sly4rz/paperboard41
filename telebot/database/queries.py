@@ -1,30 +1,26 @@
-import aiosqlite
-from config import DB_PATH
+from database.db import db
 
 
 # ---------- Пользователи ----------
 
 async def ensure_user(telegram_id: int, username: str | None,
                       first_name: str | None, last_name: str | None) -> None:
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            """INSERT INTO users (telegram_id, username, first_name, last_name, is_approved)
-               VALUES (?, ?, ?, ?, 0)
-               ON CONFLICT(telegram_id) DO UPDATE SET
-                   username   = excluded.username,
-                   first_name = excluded.first_name,
-                   last_name  = excluded.last_name""",
-            (telegram_id, username, first_name, last_name),
-        )
-        await db.commit()
+    await db.conn.execute(
+        """INSERT INTO users (telegram_id, username, first_name, last_name, is_approved)
+           VALUES (?, ?, ?, ?, 0)
+           ON CONFLICT(telegram_id) DO UPDATE SET
+               username   = excluded.username,
+               first_name = excluded.first_name,
+               last_name  = excluded.last_name""",
+        (telegram_id, username, first_name, last_name),
+    )
+    await db.conn.commit()
 
 
 async def get_user(telegram_id: int) -> dict | None:
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute(
-            "SELECT * FROM users WHERE telegram_id = ?", (telegram_id,)
-        )
+    async with db.conn.execute(
+        "SELECT * FROM users WHERE telegram_id = ?", (telegram_id,)
+    ) as cur:
         row = await cur.fetchone()
         return dict(row) if row else None
 
@@ -32,76 +28,67 @@ async def get_user(telegram_id: int) -> dict | None:
 async def set_user_level(telegram_id: int, level: str) -> None:
     if level not in ("host", "provodnik", "passenger"):
         raise ValueError(f"Недопустимый уровень: {level}")
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "UPDATE users SET subscriber_level = ? WHERE telegram_id = ?",
-            (level, telegram_id),
-        )
-        await db.commit()
+    await db.conn.execute(
+        "UPDATE users SET subscriber_level = ? WHERE telegram_id = ?",
+        (level, telegram_id),
+    )
+    await db.conn.commit()
 
 
 async def approve_user(telegram_id: int) -> bool:
-    async with aiosqlite.connect(DB_PATH) as db:
-        cur = await db.execute(
-            "UPDATE users SET is_approved = 1 WHERE telegram_id = ?",
-            (telegram_id,),
-        )
-        await db.commit()
-        return cur.rowcount > 0
+    cur = await db.conn.execute(
+        "UPDATE users SET is_approved = 1 WHERE telegram_id = ?",
+        (telegram_id,),
+    )
+    await db.conn.commit()
+    return cur.rowcount > 0
 
 
 async def revoke_user(telegram_id: int) -> bool:
-    async with aiosqlite.connect(DB_PATH) as db:
-        cur = await db.execute(
-            "UPDATE users SET is_approved = 0 WHERE telegram_id = ?",
-            (telegram_id,),
-        )
-        await db.commit()
-        return cur.rowcount > 0
+    cur = await db.conn.execute(
+        "UPDATE users SET is_approved = 0 WHERE telegram_id = ?",
+        (telegram_id,),
+    )
+    await db.conn.commit()
+    return cur.rowcount > 0
 
 
 async def list_pending_users() -> list[dict]:
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute(
-            """SELECT telegram_id, username, first_name, last_name, created_at
-               FROM users
-               WHERE is_approved = 0
-               ORDER BY created_at"""
-        )
+    async with db.conn.execute(
+        """SELECT telegram_id, username, first_name, last_name, created_at
+           FROM users
+           WHERE is_approved = 0
+           ORDER BY created_at"""
+    ) as cur:
         return [dict(r) for r in await cur.fetchall()]
 
 
 # ---------- Каталог игр ----------
 
 async def list_games() -> list[dict]:
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute(
-            """SELECT g.*,
-                      u.username    AS owner_username,
-                      u.first_name  AS owner_first_name,
-                      u.last_name   AS owner_last_name
-               FROM games g
-               LEFT JOIN users u ON u.telegram_id = g.owner_user_id
-               ORDER BY g.title"""
-        )
+    async with db.conn.execute(
+        """SELECT g.*,
+                  u.username    AS owner_username,
+                  u.first_name  AS owner_first_name,
+                  u.last_name   AS owner_last_name
+           FROM games g
+           LEFT JOIN users u ON u.telegram_id = g.owner_user_id
+           ORDER BY g.title"""
+    ) as cur:
         return [dict(r) for r in await cur.fetchall()]
 
 
 async def get_game(game_id: int) -> dict | None:
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute(
-            """SELECT g.*,
-                      u.username    AS owner_username,
-                      u.first_name  AS owner_first_name,
-                      u.last_name   AS owner_last_name
-               FROM games g
-               LEFT JOIN users u ON u.telegram_id = g.owner_user_id
-               WHERE g.id = ?""",
-            (game_id,),
-        )
+    async with db.conn.execute(
+        """SELECT g.*,
+                  u.username    AS owner_username,
+                  u.first_name  AS owner_first_name,
+                  u.last_name   AS owner_last_name
+           FROM games g
+           LEFT JOIN users u ON u.telegram_id = g.owner_user_id
+           WHERE g.id = ?""",
+        (game_id,),
+    ) as cur:
         row = await cur.fetchone()
         return dict(row) if row else None
 
@@ -111,17 +98,15 @@ async def search_games(query: str, limit: int = 10) -> list[dict]:
     if not q:
         return []
 
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute(
-            """SELECT g.*,
-                      u.username    AS owner_username,
-                      u.first_name  AS owner_first_name,
-                      u.last_name   AS owner_last_name
-               FROM games g
-               LEFT JOIN users u ON u.telegram_id = g.owner_user_id
-               ORDER BY g.title"""
-        )
+    async with db.conn.execute(
+        """SELECT g.*,
+                  u.username    AS owner_username,
+                  u.first_name  AS owner_first_name,
+                  u.last_name   AS owner_last_name
+           FROM games g
+           LEFT JOIN users u ON u.telegram_id = g.owner_user_id
+           ORDER BY g.title"""
+    ) as cur:
         games = [dict(r) for r in await cur.fetchall()]
 
     words = [w for w in q.split() if w]
@@ -148,14 +133,13 @@ async def search_games(query: str, limit: int = 10) -> list[dict]:
 
 async def create_game_night(date: str, location: str,
                             host_telegram_id: int) -> int:
-    async with aiosqlite.connect(DB_PATH) as db:
-        cur = await db.execute(
-            """INSERT INTO game_nights (date, location, host_telegram_id)
-               VALUES (?, ?, ?)""",
-            (date, location, host_telegram_id),
-        )
-        await db.commit()
-        return cur.lastrowid
+    cur = await db.conn.execute(
+        """INSERT INTO game_nights (date, location, host_telegram_id)
+           VALUES (?, ?, ?)""",
+        (date, location, host_telegram_id),
+    )
+    await db.conn.commit()
+    return cur.lastrowid
 
 
 async def add_session(
@@ -169,316 +153,301 @@ async def add_session(
     registration_min_level: str = "passenger",
     registration_approved: int = 1,
 ) -> int:
-    async with aiosqlite.connect(DB_PATH) as db:
-        cur = await db.execute(
-            """INSERT INTO game_sessions
-               (game_night_id, game_id, time_start, time_end, max_slots,
-                created_by_user_id, registration_opens_at,
-                registration_min_level, registration_approved)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (game_night_id, game_id, time_start, time_end, max_slots,
-             created_by_user_id, registration_opens_at,
-             registration_min_level, registration_approved),
-        )
-        await db.commit()
-        return cur.lastrowid
+    cur = await db.conn.execute(
+        """INSERT INTO game_sessions
+           (game_night_id, game_id, time_start, time_end, max_slots,
+            created_by_user_id, registration_opens_at,
+            registration_min_level, registration_approved)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (game_night_id, game_id, time_start, time_end, max_slots,
+         created_by_user_id, registration_opens_at,
+         registration_min_level, registration_approved),
+    )
+    await db.conn.commit()
+    return cur.lastrowid
 
 
 async def set_session_registration_approved(session_id: int,
                                             approved: int) -> None:
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "UPDATE game_sessions SET registration_approved = ? WHERE id = ?",
-            (approved, session_id),
-        )
-        await db.commit()
+    await db.conn.execute(
+        "UPDATE game_sessions SET registration_approved = ? WHERE id = ?",
+        (approved, session_id),
+    )
+    await db.conn.commit()
 
 
 async def list_upcoming_nights() -> list[dict]:
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute(
-            """SELECT gn.id, gn.date, gn.location,
-                      COUNT(gs.id) AS sessions_count
-               FROM game_nights gn
-               LEFT JOIN game_sessions gs ON gs.game_night_id = gn.id
-               WHERE gn.date >= date('now')
-               GROUP BY gn.id
-               ORDER BY gn.date"""
-        )
+    async with db.conn.execute(
+        """SELECT gn.id, gn.date, gn.location,
+                  COUNT(gs.id) AS sessions_count
+           FROM game_nights gn
+           LEFT JOIN game_sessions gs ON gs.game_night_id = gn.id
+           WHERE gn.date >= date('now')
+           GROUP BY gn.id
+           ORDER BY gn.date"""
+    ) as cur:
         return [dict(r) for r in await cur.fetchall()]
 
 
 async def list_all_upcoming_nights() -> list[dict]:
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute(
-            """SELECT gn.id, gn.date, gn.location,
-                      gn.host_telegram_id,
-                      COUNT(gs.id) AS sessions_count,
-                      COALESCE(SUM(gs.slots_taken), 0) AS total_taken
-               FROM game_nights gn
-               LEFT JOIN game_sessions gs ON gs.game_night_id = gn.id
-               WHERE gn.date >= date('now')
-               GROUP BY gn.id
-               ORDER BY gn.date"""
-        )
+    async with db.conn.execute(
+        """SELECT gn.id, gn.date, gn.location,
+                  gn.host_telegram_id,
+                  COUNT(gs.id) AS sessions_count,
+                  COALESCE(SUM(gs.slots_taken), 0) AS total_taken
+           FROM game_nights gn
+           LEFT JOIN game_sessions gs ON gs.game_night_id = gn.id
+           WHERE gn.date >= date('now')
+           GROUP BY gn.id
+           ORDER BY gn.date"""
+    ) as cur:
         return [dict(r) for r in await cur.fetchall()]
 
 
 async def get_night_sessions(night_id: int) -> list[dict]:
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute(
-            """SELECT gs.id, gs.time_start, gs.time_end, gs.max_slots,
-                      gs.slots_taken,
-                      (gs.max_slots - gs.slots_taken) AS free_slots,
-                      gs.registration_opens_at,
-                      gs.registration_min_level,
-                      gs.registration_approved,
-                      g.title, g.genre, g.min_players, g.max_players,
-                      g.duration_min, g.duration_max, g.is_subscriber_only
-               FROM game_sessions gs
-               JOIN games g ON g.id = gs.game_id
-               WHERE gs.game_night_id = ?
-               ORDER BY gs.time_start""",
-            (night_id,),
-        )
+    async with db.conn.execute(
+        """SELECT gs.id, gs.time_start, gs.time_end, gs.max_slots,
+                  gs.slots_taken,
+                  (gs.max_slots - gs.slots_taken) AS free_slots,
+                  gs.registration_opens_at,
+                  gs.registration_min_level,
+                  gs.registration_approved,
+                  g.title, g.genre, g.min_players, g.max_players,
+                  g.duration_min, g.duration_max, g.is_subscriber_only
+           FROM game_sessions gs
+           JOIN games g ON g.id = gs.game_id
+           WHERE gs.game_night_id = ?
+           ORDER BY gs.time_start""",
+        (night_id,),
+    ) as cur:
         return [dict(r) for r in await cur.fetchall()]
 
 
 async def get_session(session_id: int) -> dict | None:
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute(
-            """SELECT gs.*, g.title, g.genre, g.owner,
-                      g.min_players, g.max_players,
-                      g.is_subscriber_only,
-                      gn.id AS night_id,
-                      gn.date, gn.location,
-                      (gs.max_slots - gs.slots_taken) AS free_slots
-               FROM game_sessions gs
-               JOIN games g       ON g.id  = gs.game_id
-               JOIN game_nights gn ON gn.id = gs.game_night_id
-               WHERE gs.id = ?""",
-            (session_id,),
-        )
+    async with db.conn.execute(
+        """SELECT gs.*, g.title, g.genre, g.owner,
+                  g.min_players, g.max_players,
+                  g.is_subscriber_only,
+                  gn.id AS night_id,
+                  gn.date, gn.location,
+                  (gs.max_slots - gs.slots_taken) AS free_slots
+           FROM game_sessions gs
+           JOIN games g       ON g.id  = gs.game_id
+           JOIN game_nights gn ON gn.id = gs.game_night_id
+           WHERE gs.id = ?""",
+        (session_id,),
+    ) as cur:
         row = await cur.fetchone()
         return dict(row) if row else None
 
 
 async def get_session_author(session_id: int) -> int | None:
-    async with aiosqlite.connect(DB_PATH) as db:
-        cur = await db.execute(
-            "SELECT created_by_user_id FROM game_sessions WHERE id = ?",
-            (session_id,),
-        )
+    async with db.conn.execute(
+        "SELECT created_by_user_id FROM game_sessions WHERE id = ?",
+        (session_id,),
+    ) as cur:
         row = await cur.fetchone()
         return row[0] if row else None
+
+
+async def get_session_registrations_full(session_id: int) -> list[dict]:
+    """Список записавшихся на сессию с telegram_id — для уведомлений."""
+    async with db.conn.execute(
+        """SELECT u.telegram_id, u.first_name, u.username
+           FROM registrations r
+           JOIN users u ON u.telegram_id = r.user_telegram_id
+           WHERE r.session_id = ?""",
+        (session_id,),
+    ) as cur:
+        return [dict(r) for r in await cur.fetchall()]
 
 
 # ---------- Записи на игры ----------
 
 async def register_for_session(session_id: int, user_id: int) -> tuple[bool, str]:
-    async with aiosqlite.connect(DB_PATH) as db:
-        try:
-            await db.execute("BEGIN")
+    try:
+        await db.conn.execute("BEGIN")
 
-            db.row_factory = aiosqlite.Row
-            cur = await db.execute(
-                """SELECT gs.max_slots, gs.slots_taken,
-                          gs.registration_opens_at,
-                          gs.registration_min_level,
-                          gs.registration_approved,
-                          g.is_subscriber_only,
-                          u.subscriber_level
-                   FROM game_sessions gs
-                   JOIN games g ON g.id = gs.game_id
-                   JOIN users u ON u.telegram_id = ?
-                   WHERE gs.id = ?""",
-                (user_id, session_id),
-            )
+        async with db.conn.execute(
+            """SELECT gs.max_slots, gs.slots_taken,
+                      gs.registration_opens_at,
+                      gs.registration_min_level,
+                      gs.registration_approved,
+                      g.is_subscriber_only,
+                      u.subscriber_level
+               FROM game_sessions gs
+               JOIN games g ON g.id = gs.game_id
+               JOIN users u ON u.telegram_id = ?
+               WHERE gs.id = ?""",
+            (user_id, session_id),
+        ) as cur:
             row = await cur.fetchone()
-            if row is None:
-                await db.rollback()
-                return False, "Сессия не найдена или пользователь не зарегистрирован."
 
-            if row["is_subscriber_only"] and row["subscriber_level"] not in ("provodnik", "host"):
-                await db.rollback()
-                return False, "Эта игра доступна только подписчикам уровня «Проводник»."
+        if row is None:
+            await db.conn.rollback()
+            return False, "Сессия не найдена или пользователь не зарегистрирован."
 
-            # Проверка уровня регистрации: пока не реализована автозапись,
-            # эти флаги всегда дают доступ. Логика заложена на будущее.
-            if row["registration_min_level"] == "provodnik" and row["subscriber_level"] == "passenger":
-                await db.rollback()
-                return False, "Запись на эту игру доступна только с уровня «Проводник»."
+        if row["is_subscriber_only"] and row["subscriber_level"] not in ("provodnik", "host"):
+            await db.conn.rollback()
+            return False, "Эта игра доступна только подписчикам уровня «Проводник»."
 
-            if row["slots_taken"] >= row["max_slots"]:
-                await db.rollback()
-                return False, "Свободных мест больше нет."
+        if row["registration_min_level"] == "provodnik" and row["subscriber_level"] == "passenger":
+            await db.conn.rollback()
+            return False, "Запись на эту игру доступна только с уровня «Проводник»."
 
-            cur = await db.execute(
-                "SELECT 1 FROM registrations WHERE session_id = ? AND user_telegram_id = ?",
-                (session_id, user_id),
-            )
-            if await cur.fetchone():
-                await db.rollback()
-                return False, "Вы уже записаны на эту игру."
+        if row["slots_taken"] >= row["max_slots"]:
+            await db.conn.rollback()
+            return False, "Свободных мест больше нет."
 
-            await db.execute(
-                "INSERT INTO registrations (session_id, user_telegram_id) VALUES (?, ?)",
-                (session_id, user_id),
-            )
-            await db.execute(
-                "UPDATE game_sessions SET slots_taken = slots_taken + 1 WHERE id = ?",
-                (session_id,),
-            )
-            await db.commit()
-            return True, "Вы успешно записаны!"
-        except Exception as e:
-            await db.rollback()
-            return False, f"Ошибка записи: {e}"
+        async with db.conn.execute(
+            "SELECT 1 FROM registrations WHERE session_id = ? AND user_telegram_id = ?",
+            (session_id, user_id),
+        ) as cur:
+            exists = await cur.fetchone()
+
+        if exists:
+            await db.conn.rollback()
+            return False, "Вы уже записаны на эту игру."
+
+        await db.conn.execute(
+            "INSERT INTO registrations (session_id, user_telegram_id) VALUES (?, ?)",
+            (session_id, user_id),
+        )
+        await db.conn.execute(
+            "UPDATE game_sessions SET slots_taken = slots_taken + 1 WHERE id = ?",
+            (session_id,),
+        )
+        await db.conn.commit()
+        return True, "Вы успешно записаны!"
+    except Exception as e:
+        await db.conn.rollback()
+        return False, f"Ошибка записи: {e}"
 
 
 async def list_user_registrations(user_id: int) -> list[dict]:
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute(
-            """SELECT r.id AS reg_id, gs.id AS session_id,
-                      gs.time_start, gs.time_end,
-                      gn.date, gn.location,
-                      g.title, g.genre
-               FROM registrations r
-               JOIN game_sessions gs ON gs.id = r.session_id
-               JOIN game_nights  gn ON gn.id = gs.game_night_id
-               JOIN games        g  ON g.id  = gs.game_id
-               WHERE r.user_telegram_id = ?
-                 AND gn.date >= date('now')
-               ORDER BY gn.date, gs.time_start""",
-            (user_id,),
-        )
+    async with db.conn.execute(
+        """SELECT r.id AS reg_id, gs.id AS session_id,
+                  gs.time_start, gs.time_end,
+                  gn.date, gn.location,
+                  g.title, g.genre
+           FROM registrations r
+           JOIN game_sessions gs ON gs.id = r.session_id
+           JOIN game_nights  gn ON gn.id = gs.game_night_id
+           JOIN games        g  ON g.id  = gs.game_id
+           WHERE r.user_telegram_id = ?
+             AND gn.date >= date('now')
+           ORDER BY gn.date, gs.time_start""",
+        (user_id,),
+    ) as cur:
         return [dict(r) for r in await cur.fetchall()]
 
 
 async def cancel_registration(reg_id: int, user_id: int) -> bool:
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute(
-            "SELECT session_id FROM registrations WHERE id = ? AND user_telegram_id = ?",
-            (reg_id, user_id),
-        )
+    async with db.conn.execute(
+        "SELECT session_id FROM registrations WHERE id = ? AND user_telegram_id = ?",
+        (reg_id, user_id),
+    ) as cur:
         row = await cur.fetchone()
-        if not row:
-            return False
-        session_id = row["session_id"]
-        await db.execute("DELETE FROM registrations WHERE id = ?", (reg_id,))
-        await db.execute(
-            "UPDATE game_sessions SET slots_taken = slots_taken - 1 WHERE id = ?",
-            (session_id,),
-        )
-        await db.commit()
-        return True
+
+    if not row:
+        return False
+
+    session_id = row["session_id"]
+    await db.conn.execute("DELETE FROM registrations WHERE id = ?", (reg_id,))
+    await db.conn.execute(
+        "UPDATE game_sessions SET slots_taken = slots_taken - 1 WHERE id = ?",
+        (session_id,),
+    )
+    await db.conn.commit()
+    return True
 
 
 # ---------- Управление игротеками ----------
 
 async def get_night(night_id: int) -> dict | None:
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute(
-            """SELECT gn.id, gn.date, gn.location, gn.host_telegram_id,
-                      COUNT(gs.id) AS sessions_count,
-                      COALESCE(SUM(gs.slots_taken), 0) AS total_taken
-               FROM game_nights gn
-               LEFT JOIN game_sessions gs ON gs.game_night_id = gn.id
-               WHERE gn.id = ?
-               GROUP BY gn.id""",
-            (night_id,),
-        )
+    async with db.conn.execute(
+        """SELECT gn.id, gn.date, gn.location, gn.host_telegram_id,
+                  COUNT(gs.id) AS sessions_count,
+                  COALESCE(SUM(gs.slots_taken), 0) AS total_taken
+           FROM game_nights gn
+           LEFT JOIN game_sessions gs ON gs.game_night_id = gn.id
+           WHERE gn.id = ?
+           GROUP BY gn.id""",
+        (night_id,),
+    ) as cur:
         row = await cur.fetchone()
         return dict(row) if row else None
 
 
 async def get_night_sessions_for_edit(night_id: int) -> list[dict]:
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute(
-            """SELECT gs.id, gs.time_start, gs.time_end,
-                      gs.max_slots, gs.slots_taken,
-                      gs.created_by_user_id,
-                      g.title AS game_title
-               FROM game_sessions gs
-               JOIN games g ON g.id = gs.game_id
-               WHERE gs.game_night_id = ?
-               ORDER BY gs.time_start""",
-            (night_id,),
-        )
+    async with db.conn.execute(
+        """SELECT gs.id, gs.time_start, gs.time_end,
+                  gs.max_slots, gs.slots_taken,
+                  gs.created_by_user_id,
+                  g.title AS game_title
+           FROM game_sessions gs
+           JOIN games g ON g.id = gs.game_id
+           WHERE gs.game_night_id = ?
+           ORDER BY gs.time_start""",
+        (night_id,),
+    ) as cur:
         return [dict(r) for r in await cur.fetchall()]
 
 
 async def update_night_date(night_id: int, new_date: str) -> None:
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "UPDATE game_nights SET date = ? WHERE id = ?",
-            (new_date, night_id),
-        )
-        await db.commit()
+    await db.conn.execute(
+        "UPDATE game_nights SET date = ? WHERE id = ?",
+        (new_date, night_id),
+    )
+    await db.conn.commit()
 
 
 async def update_night_location(night_id: int, new_location: str) -> None:
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "UPDATE game_nights SET location = ? WHERE id = ?",
-            (new_location, night_id),
-        )
-        await db.commit()
+    await db.conn.execute(
+        "UPDATE game_nights SET location = ? WHERE id = ?",
+        (new_location, night_id),
+    )
+    await db.conn.commit()
 
 
 async def delete_night(night_id: int) -> None:
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("PRAGMA foreign_keys = ON")
-        await db.execute("DELETE FROM game_nights WHERE id = ?", (night_id,))
-        await db.commit()
+    await db.conn.execute("DELETE FROM game_nights WHERE id = ?", (night_id,))
+    await db.conn.commit()
 
 
 async def delete_session(session_id: int) -> None:
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("PRAGMA foreign_keys = ON")
-        await db.execute("DELETE FROM game_sessions WHERE id = ?", (session_id,))
-        await db.commit()
+    await db.conn.execute("DELETE FROM game_sessions WHERE id = ?", (session_id,))
+    await db.conn.commit()
 
 
 async def count_registrations_for_night(night_id: int) -> int:
-    async with aiosqlite.connect(DB_PATH) as db:
-        cur = await db.execute(
-            """SELECT COUNT(*) FROM registrations r
-               JOIN game_sessions gs ON gs.id = r.session_id
-               WHERE gs.game_night_id = ?""",
-            (night_id,),
-        )
-        (count,) = await cur.fetchone()
-        return count
+    async with db.conn.execute(
+        """SELECT COUNT(*) FROM registrations r
+           JOIN game_sessions gs ON gs.id = r.session_id
+           WHERE gs.game_night_id = ?""",
+        (night_id,),
+    ) as cur:
+        row = await cur.fetchone()
+        return row[0] if row else 0
 
 
 async def get_all_night_registrations(night_id: int) -> list[dict]:
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute(
-            """SELECT gs.id AS session_id,
-                      gs.time_start, gs.time_end,
-                      gs.max_slots, gs.slots_taken,
-                      g.title AS game_title, g.genre,
-                      u.telegram_id, u.username,
-                      u.first_name, u.last_name,
-                      r.registered_at
-               FROM game_sessions gs
-               JOIN games g ON g.id = gs.game_id
-               LEFT JOIN registrations r ON r.session_id = gs.id
-               LEFT JOIN users u ON u.telegram_id = r.user_telegram_id
-               WHERE gs.game_night_id = ?
-               ORDER BY gs.time_start, r.registered_at""",
-            (night_id,),
-        )
+    async with db.conn.execute(
+        """SELECT gs.id AS session_id,
+                  gs.time_start, gs.time_end,
+                  gs.max_slots, gs.slots_taken,
+                  g.title AS game_title, g.genre,
+                  u.telegram_id, u.username,
+                  u.first_name, u.last_name,
+                  r.registered_at
+           FROM game_sessions gs
+           JOIN games g ON g.id = gs.game_id
+           LEFT JOIN registrations r ON r.session_id = gs.id
+           LEFT JOIN users u ON u.telegram_id = r.user_telegram_id
+           WHERE gs.game_night_id = ?
+           ORDER BY gs.time_start, r.registered_at""",
+        (night_id,),
+    ) as cur:
         return [dict(r) for r in await cur.fetchall()]
 
 
@@ -487,53 +456,50 @@ async def get_all_night_registrations(night_id: int) -> list[dict]:
 async def get_user_day_registrations(
     date_from: str, date_to: str
 ) -> list[dict]:
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute(
-            """SELECT u.telegram_id,
-                      u.first_name,
-                      u.username,
-                      gn.date,
-                      gn.location,
-                      gs.id           AS session_id,
-                      gs.time_start,
-                      gs.time_end,
-                      g.title          AS game_title
-               FROM registrations r
-               JOIN game_sessions gs ON gs.id = r.session_id
-               JOIN game_nights  gn ON gn.id = gs.game_night_id
-               JOIN games        g  ON g.id  = gs.game_id
-               JOIN users        u  ON u.telegram_id = r.user_telegram_id
-               WHERE gn.date >= ?
-                 AND gn.date <= ?
-               ORDER BY u.telegram_id, gn.date, gs.time_start""",
-            (date_from, date_to),
-        )
+    async with db.conn.execute(
+        """SELECT u.telegram_id,
+                  u.first_name,
+                  u.username,
+                  gn.date,
+                  gn.location,
+                  gs.id           AS session_id,
+                  gs.time_start,
+                  gs.time_end,
+                  g.title          AS game_title
+           FROM registrations r
+           JOIN game_sessions gs ON gs.id = r.session_id
+           JOIN game_nights  gn ON gn.id = gs.game_night_id
+           JOIN games        g  ON g.id  = gs.game_id
+           JOIN users        u  ON u.telegram_id = r.user_telegram_id
+           WHERE gn.date >= ?
+             AND gn.date <= ?
+           ORDER BY u.telegram_id, gn.date, gs.time_start""",
+        (date_from, date_to),
+    ) as cur:
         return [dict(r) for r in await cur.fetchall()]
 
 
 async def was_day_notification_sent(user_id: int, date: str,
                                     kind: str) -> bool:
-    async with aiosqlite.connect(DB_PATH) as db:
-        cur = await db.execute(
-            """SELECT 1 FROM notifications_log
-               WHERE user_id = ? AND date = ? AND kind = ?""",
-            (user_id, date, kind),
-        )
+    async with db.conn.execute(
+        """SELECT 1 FROM notifications_log
+           WHERE user_id = ? AND date = ? AND kind = ?""",
+        (user_id, date, kind),
+    ) as cur:
         return await cur.fetchone() is not None
 
 
 async def log_day_notification(user_id: int, date: str, kind: str) -> None:
-    async with aiosqlite.connect(DB_PATH) as db:
-        try:
-            await db.execute(
-                """INSERT INTO notifications_log (user_id, date, kind)
-                   VALUES (?, ?, ?)""",
-                (user_id, date, kind),
-            )
-            await db.commit()
-        except aiosqlite.IntegrityError:
-            pass
+    try:
+        await db.conn.execute(
+            """INSERT INTO notifications_log (user_id, date, kind)
+               VALUES (?, ?, ?)""",
+            (user_id, date, kind),
+        )
+        await db.conn.commit()
+    except Exception:
+        # Уникальный индекс — значит, уже отправлено, молча игнорируем
+        pass
 
 
 # ---------- Опросы доступности ----------
@@ -541,65 +507,58 @@ async def log_day_notification(user_id: int, date: str, kind: str) -> None:
 async def create_availability_poll(game_night_id: int,
                                    created_by_user_id: int,
                                    closes_at: str | None = None) -> int:
-    async with aiosqlite.connect(DB_PATH) as db:
-        cur = await db.execute(
-            """INSERT INTO availability_polls
-               (game_night_id, created_by_user_id, closes_at)
-               VALUES (?, ?, ?)""",
-            (game_night_id, created_by_user_id, closes_at),
-        )
-        await db.commit()
-        return cur.lastrowid
+    cur = await db.conn.execute(
+        """INSERT INTO availability_polls
+           (game_night_id, created_by_user_id, closes_at)
+           VALUES (?, ?, ?)""",
+        (game_night_id, created_by_user_id, closes_at),
+    )
+    await db.conn.commit()
+    return cur.lastrowid
 
 
 async def get_active_poll_for_night(night_id: int) -> dict | None:
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute(
-            """SELECT * FROM availability_polls
-               WHERE game_night_id = ? AND status = 'open'
-               ORDER BY id DESC LIMIT 1""",
-            (night_id,),
-        )
+    async with db.conn.execute(
+        """SELECT * FROM availability_polls
+           WHERE game_night_id = ? AND status = 'open'
+           ORDER BY id DESC LIMIT 1""",
+        (night_id,),
+    ) as cur:
         row = await cur.fetchone()
         return dict(row) if row else None
 
 
 async def upsert_availability_response(poll_id: int, user_id: int,
                                        time_from: str, time_to: str) -> None:
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            """INSERT INTO availability_responses
-               (poll_id, user_id, time_from, time_to)
-               VALUES (?, ?, ?, ?)
-               ON CONFLICT(poll_id, user_id) DO UPDATE SET
-                   time_from = excluded.time_from,
-                   time_to   = excluded.time_to,
-                   created_at = CURRENT_TIMESTAMP""",
-            (poll_id, user_id, time_from, time_to),
-        )
-        await db.commit()
+    await db.conn.execute(
+        """INSERT INTO availability_responses
+           (poll_id, user_id, time_from, time_to)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(poll_id, user_id) DO UPDATE SET
+               time_from = excluded.time_from,
+               time_to   = excluded.time_to,
+               created_at = CURRENT_TIMESTAMP""",
+        (poll_id, user_id, time_from, time_to),
+    )
+    await db.conn.commit()
 
 
 async def list_availability_responses(poll_id: int) -> list[dict]:
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute(
-            """SELECT r.user_id, r.time_from, r.time_to, r.created_at,
-                      u.username, u.first_name, u.last_name
-               FROM availability_responses r
-               JOIN users u ON u.telegram_id = r.user_id
-               WHERE r.poll_id = ?
-               ORDER BY r.time_from""",
-            (poll_id,),
-        )
+    async with db.conn.execute(
+        """SELECT r.user_id, r.time_from, r.time_to, r.created_at,
+                  u.username, u.first_name, u.last_name
+           FROM availability_responses r
+           JOIN users u ON u.telegram_id = r.user_id
+           WHERE r.poll_id = ?
+           ORDER BY r.time_from""",
+        (poll_id,),
+    ) as cur:
         return [dict(r) for r in await cur.fetchall()]
 
 
 async def close_availability_poll(poll_id: int) -> None:
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "UPDATE availability_polls SET status = 'closed' WHERE id = ?",
-            (poll_id,),
-        )
-        await db.commit()
+    await db.conn.execute(
+        "UPDATE availability_polls SET status = 'closed' WHERE id = ?",
+        (poll_id,),
+    )
+    await db.conn.commit()

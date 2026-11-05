@@ -1,15 +1,16 @@
 from datetime import datetime
 
-import aiosqlite
 from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
-from config import DB_PATH
+from database.db import db
 from database.queries import (
     get_game,
     get_night,
     get_night_sessions_for_edit,
+    get_session,
+    get_session_registrations_full,
     add_session,
     delete_session,
     search_games,
@@ -26,6 +27,11 @@ from keyboards.menus import (
 )
 from states.states import AddSessionToNight
 from utils import is_admin, is_host_or_admin, fmt_date
+from notifications import (
+    notify_session_deleted,
+    notify_registrants_deleted,
+    notify_game_owner_deleted,
+)
 
 from ._helpers import add_minutes, can_manage_night, can_delete_session
 
@@ -90,16 +96,14 @@ async def sessions_manage(call: CallbackQuery) -> None:
 async def session_delete_confirm(call: CallbackQuery) -> None:
     session_id = int(call.data.split(":")[1])
 
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute(
-            """SELECT gs.game_night_id, gs.slots_taken,
-                      gs.created_by_user_id, g.title
-               FROM game_sessions gs
-               JOIN games g ON g.id = gs.game_id
-               WHERE gs.id = ?""",
-            (session_id,),
-        )
+    async with db.conn.execute(
+        """SELECT gs.game_night_id, gs.slots_taken,
+                  gs.created_by_user_id, g.title
+           FROM game_sessions gs
+           JOIN games g ON g.id = gs.game_id
+           WHERE gs.id = ?""",
+        (session_id,),
+    ) as cur:
         row = await cur.fetchone()
 
     if not row:
@@ -122,12 +126,12 @@ async def session_delete_confirm(call: CallbackQuery) -> None:
     if row["slots_taken"] > 0:
         warning = (
             f"\n\n⚠️ На игру записано {row['slots_taken']} чел. "
-            f"Их записи будут удалены без уведомления."
+            "Их записи будут удалены, им придёт уведомление."
         )
     if is_author and not is_owner:
         warning += (
             "\n\n<i>Вы добавляли эту игру в чужую игротеку. "
-            "Владелец игротеки не будет уведомлён об удалении.</i>"
+            "Владелец игротеки получит уведомление об удалении.</i>"
         )
 
     await call.message.edit_text(
@@ -142,12 +146,10 @@ async def session_delete_confirm(call: CallbackQuery) -> None:
 async def session_delete_confirm_yes(call: CallbackQuery) -> None:
     session_id = int(call.data.split(":")[1])
 
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute(
-            "SELECT game_night_id FROM game_sessions WHERE id = ?",
-            (session_id,),
-        )
+    async with db.conn.execute(
+        "SELECT game_night_id FROM game_sessions WHERE id = ?",
+        (session_id,),
+    ) as cur:
         row = await cur.fetchone()
 
     if not row:
@@ -160,8 +162,46 @@ async def session_delete_confirm_yes(call: CallbackQuery) -> None:
         await call.answer("Нет доступа", show_alert=True)
         return
 
+    # --- Собираем данные ДО удаления ---
+    session = await get_session(session_id)
+    registrants = await get_session_registrations_full(session_id)
+
+    # --- Удаляем ---
     await delete_session(session_id)
 
+    # --- Рассылаем уведомления ---
+    if session:
+        await notify_session_deleted(
+            call.bot,
+            session_id,
+            call.from_user.id,
+            night_id=night_id,
+            game_title=session["title"],
+            time_start=session["time_start"],
+            time_end=session["time_end"],
+        )
+        await notify_registrants_deleted(
+            call.bot,
+            registrants,
+            call.from_user.id,
+            game_title=session["title"],
+            date_str=session["date"],
+            location=session["location"],
+            time_start=session["time_start"],
+            time_end=session["time_end"],
+        )
+        await notify_game_owner_deleted(
+            call.bot,
+            session["game_id"],
+            call.from_user.id,
+            game_title=session["title"],
+            date_str=session["date"],
+            location=session["location"],
+            time_start=session["time_start"],
+            time_end=session["time_end"],
+        )
+
+    # --- Обновляем экран ---
     can_manage = await can_manage_night(call.from_user.id, night)
     sessions = await get_night_sessions_for_edit(night_id)
     if not sessions:

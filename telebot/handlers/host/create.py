@@ -1,3 +1,4 @@
+import locale
 from datetime import datetime, timedelta
 
 from aiogram import Router, F
@@ -26,6 +27,18 @@ from utils import is_host_or_admin
 from ._helpers import add_minutes
 
 router = Router()
+
+
+def _make_calendar() -> SimpleCalendar:
+    """Создаёт календарь с русской локалью, если она доступна.
+
+    Если локаль не установлена (например, в systemd-сервисе без LANG/LC_ALL),
+    откатывается на английский календарь — бот не падает.
+    """
+    try:
+        return SimpleCalendar(locale="ru_RU.UTF-8", show_alerts=True)
+    except locale.Error:
+        return SimpleCalendar(show_alerts=True)
 
 
 async def _finalize_session(message, state: FSMContext,
@@ -74,13 +87,16 @@ async def _finalize_session(message, state: FSMContext,
 @router.callback_query(F.data == "host_create")
 async def start_create(call: CallbackQuery, state: FSMContext) -> None:
     if not await is_host_or_admin(call.from_user.id):
-        await call.answer("Только организаторы могут создавать игротеки", show_alert=True)
+        await call.answer(
+            "Только организаторы могут создавать игротеки",
+            show_alert=True,
+        )
         return
 
     await state.clear()
     await state.set_state(CreateNight.date)
 
-    calendar = SimpleCalendar(locale="ru_RU", show_alerts=True)
+    calendar = _make_calendar()
     calendar.set_dates_range(
         datetime.now(),
         datetime.now() + timedelta(days=365),
@@ -99,7 +115,7 @@ async def enter_date(
     callback_data: SimpleCalendarCallback,
     state: FSMContext,
 ) -> None:
-    calendar = SimpleCalendar(locale="ru_RU", show_alerts=True)
+    calendar = _make_calendar()
     calendar.set_dates_range(
         datetime.now(),
         datetime.now() + timedelta(days=365),

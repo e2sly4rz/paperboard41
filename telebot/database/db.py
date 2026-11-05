@@ -2,6 +2,33 @@ import aiosqlite
 from config import DB_PATH
 
 
+class Database:
+    """Единое долгоживущее соединение с SQLite."""
+
+    def __init__(self, path: str):
+        self.path = path
+        self._conn: aiosqlite.Connection | None = None
+
+    async def connect(self) -> None:
+        self._conn = await aiosqlite.connect(self.path)
+        self._conn.row_factory = aiosqlite.Row
+        await self._conn.execute("PRAGMA foreign_keys = ON")
+
+    async def close(self) -> None:
+        if self._conn:
+            await self._conn.close()
+            self._conn = None
+
+    @property
+    def conn(self) -> aiosqlite.Connection:
+        if self._conn is None:
+            raise RuntimeError("Database not connected")
+        return self._conn
+
+
+db = Database(DB_PATH)
+
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
     telegram_id      INTEGER PRIMARY KEY,
@@ -115,68 +142,59 @@ CREATE INDEX IF NOT EXISTS idx_avail_poll
 """
 
 
-async def _column_exists(db: aiosqlite.Connection, table: str, column: str) -> bool:
-    cur = await db.execute(f"PRAGMA table_info({table})")
-    columns = [row[1] for row in await cur.fetchall()]
+async def _column_exists(table: str, column: str) -> bool:
+    async with db.conn.execute(f"PRAGMA table_info({table})") as cur:
+        columns = [row[1] for row in await cur.fetchall()]
     return column in columns
 
 
-async def _run_migrations(db: aiosqlite.Connection) -> None:
-    # users.is_approved
-    if not await _column_exists(db, "users", "is_approved"):
-        await db.execute(
+async def _run_migrations() -> None:
+    if not await _column_exists("users", "is_approved"):
+        await db.conn.execute(
             "ALTER TABLE users ADD COLUMN is_approved INTEGER DEFAULT 0"
         )
 
-    # users.subscriber_level: guest → passenger
-    await db.execute(
+    await db.conn.execute(
         "UPDATE users SET subscriber_level = 'passenger' "
         "WHERE subscriber_level = 'guest'"
     )
 
-    # games.owner_user_id
-    if not await _column_exists(db, "games", "owner_user_id"):
-        await db.execute(
+    if not await _column_exists("games", "owner_user_id"):
+        await db.conn.execute(
             "ALTER TABLE games ADD COLUMN owner_user_id INTEGER"
         )
 
-    # game_sessions.created_by_user_id
-    if not await _column_exists(db, "game_sessions", "created_by_user_id"):
-        await db.execute(
+    if not await _column_exists("game_sessions", "created_by_user_id"):
+        await db.conn.execute(
             "ALTER TABLE game_sessions ADD COLUMN created_by_user_id INTEGER"
         )
 
-    # game_sessions.registration_opens_at
-    if not await _column_exists(db, "game_sessions", "registration_opens_at"):
-        await db.execute(
+    if not await _column_exists("game_sessions", "registration_opens_at"):
+        await db.conn.execute(
             "ALTER TABLE game_sessions ADD COLUMN registration_opens_at TIMESTAMP"
         )
 
-    # game_sessions.registration_min_level
-    if not await _column_exists(db, "game_sessions", "registration_min_level"):
-        await db.execute(
+    if not await _column_exists("game_sessions", "registration_min_level"):
+        await db.conn.execute(
             "ALTER TABLE game_sessions ADD COLUMN registration_min_level "
             "TEXT NOT NULL DEFAULT 'passenger'"
         )
 
-    # game_sessions.registration_approved
-    if not await _column_exists(db, "game_sessions", "registration_approved"):
-        await db.execute(
+    if not await _column_exists("game_sessions", "registration_approved"):
+        await db.conn.execute(
             "ALTER TABLE game_sessions ADD COLUMN registration_approved "
             "INTEGER NOT NULL DEFAULT 1"
         )
 
-    # Индексы, которые нельзя ставить в SCHEMA до миграции колонок
-    await db.execute(
+    await db.conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_sessions_created_by "
         "ON game_sessions(created_by_user_id)"
     )
 
-    await db.commit()
+    await db.conn.commit()
 
 
 async def init_db() -> None:
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.executescript(SCHEMA)
-        await db.commit()
-        await _run_migrations(db)
+    await db.conn.executescript(SCHEMA)
+    await db.conn.commit()
+    await _run_migrations()

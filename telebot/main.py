@@ -8,7 +8,7 @@ from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
 
 from config import BOT_TOKEN
-from database.db import init_db
+from database.db import db, init_db
 from handlers import setup_routers
 from middleware.access import AccessMiddleware
 from scheduler import start_scheduler, stop_scheduler
@@ -33,6 +33,7 @@ async def main() -> None:
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
 
+    await db.connect()
     await init_db()
 
     session = build_session()
@@ -54,6 +55,7 @@ async def main() -> None:
     finally:
         stop_scheduler()
         await bot.session.close()
+        await db.close()
         logging.info("Сессия бота закрыта")
 
 
