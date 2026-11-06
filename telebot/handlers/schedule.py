@@ -24,6 +24,7 @@ from keyboards.menus import (
 )
 from states.states import PollTime
 from utils import is_host_or_admin, fmt_date
+from notifications import notify_game_author_registration
 
 router = Router()
 
@@ -101,7 +102,9 @@ async def show_session(call: CallbackQuery) -> None:
 
     user = await get_user(call.from_user.id)
     level = user["subscriber_level"] if user else "passenger"
+
     conflict = await find_session_conflict_for_user(session_id, call.from_user.id)
+
     can_register = (
         s["free_slots"] > 0
         and (not s["is_subscriber_only"] or level in ("provodnik", "host"))
@@ -149,21 +152,46 @@ async def do_register(call: CallbackQuery) -> None:
         return
 
     s = await get_session(session_id)
-    if s:
-        taken = s["max_slots"] - s["free_slots"]
-        text = (
-            f"🎲 <b>{s['title']}</b>\n"
-            f"Дата: {fmt_date(s['date'])}\n"
-            f"Время: {s['time_start']}–{s['time_end'] or '?'}\n"
-            f"Место: {s['location']}\n"
-            f"Занято мест: {taken} из {s['max_slots']}\n"
-            f"\n✅ Вы записаны!"
-        )
-        await call.message.edit_text(
-            text,
-            parse_mode="HTML",
-            reply_markup=session_card(session_id, s["night_id"], False),
-        )
+    if not s:
+        return
+
+    taken = s["max_slots"] - s["free_slots"]
+    text = (
+        f"🎲 <b>{s['title']}</b>\n"
+        f"Дата: {fmt_date(s['date'])}\n"
+        f"Время: {s['time_start']}–{s['time_end'] or '?'}\n"
+        f"Место: {s['location']}\n"
+        f"Занято мест: {taken} из {s['max_slots']}\n"
+        f"\n✅ Вы записаны!"
+    )
+    await call.message.edit_text(
+        text,
+        parse_mode="HTML",
+        reply_markup=session_card(session_id, s["night_id"], False),
+    )
+
+    # Уведомление автору игры о новой записи
+    user = await get_user(call.from_user.id)
+    player_name = "Без имени"
+    if user:
+        name_parts = [user["first_name"] or "", user["last_name"] or ""]
+        player_name = " ".join(p for p in name_parts if p).strip() or "Без имени"
+        if user.get("username"):
+            player_name += f" (@{user['username']})"
+
+    await notify_game_author_registration(
+        call.bot,
+        session_id,
+        call.from_user.id,
+        game_title=s["title"],
+        date_str=s["date"],
+        location=s["location"],
+        time_start=s["time_start"],
+        time_end=s["time_end"],
+        slots_taken=taken,
+        max_slots=s["max_slots"],
+        player_name=player_name,
+    )
 
 
 # ---------- Опрос о времени ----------

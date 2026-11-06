@@ -3,6 +3,7 @@ import logging
 from aiogram import Bot
 from aiogram.exceptions import TelegramForbiddenError, TelegramRetryAfter
 
+from database.db import db
 from database.queries import get_night, get_game
 from utils import fmt_date
 
@@ -110,6 +111,7 @@ async def notify_game_owner_deleted(
     )
     await _safe_send(bot, owner_id, text)
 
+
 async def notify_poll_created(
     bot: Bot,
     participants: list[dict],
@@ -130,3 +132,88 @@ async def notify_poll_created(
             f"и нажмите «⏰ Указать удобное время»."
         )
         await _safe_send(bot, user_id, text)
+
+
+async def notify_game_author_registration(
+    bot: Bot,
+    session_id: int,
+    initiator_id: int,
+    *,
+    game_title: str,
+    date_str: str,
+    location: str,
+    time_start: str,
+    time_end: str | None,
+    slots_taken: int,
+    max_slots: int,
+    player_name: str,
+) -> None:
+    """Уведомляет автора сессии (created_by_user_id) о новой записи.
+
+    Если автор совпадает с инициатором — уведомление не отправляется.
+    """
+    async with db.conn.execute(
+        "SELECT created_by_user_id FROM game_sessions WHERE id = ?",
+        (session_id,),
+    ) as cur:
+        row = await cur.fetchone()
+
+    if not row:
+        return
+
+    author_id = row["created_by_user_id"]
+    if not author_id or author_id == initiator_id:
+        return
+
+    text = (
+        f"🎲 <b>Новая запись на вашу игру</b>\n\n"
+        f"🎮 {game_title}\n"
+        f"📅 {fmt_date(date_str)} • {time_start}–{time_end or '?'}\n"
+        f"📍 {location}\n\n"
+        f"Записался: {player_name}\n"
+        f"Занято: {slots_taken} из {max_slots}"
+    )
+    await _safe_send(bot, author_id, text)
+
+
+async def notify_game_author_cancellation(
+    bot: Bot,
+    session_id: int,
+    initiator_id: int,
+    *,
+    game_title: str,
+    date_str: str,
+    location: str,
+    time_start: str,
+    time_end: str | None,
+    slots_taken: int,
+    max_slots: int,
+    player_name: str,
+) -> None:
+    """Уведомляет автора сессии об отмене записи игроком.
+
+    Если автор совпадает с инициатором — уведомление не отправляется.
+    slots_taken — уже после декремента.
+    """
+    async with db.conn.execute(
+        "SELECT created_by_user_id FROM game_sessions WHERE id = ?",
+        (session_id,),
+    ) as cur:
+        row = await cur.fetchone()
+
+    if not row:
+        return
+
+    author_id = row["created_by_user_id"]
+    if not author_id or author_id == initiator_id:
+        return
+
+    text = (
+        f"🎲 <b>Игрок отменил запись</b>\n\n"
+        f"🎮 {game_title}\n"
+        f"📅 {fmt_date(date_str)} • {time_start}–{time_end or '?'}\n"
+        f"📍 {location}\n\n"
+        f"Отменился: {player_name}\n"
+        f"Занято: {slots_taken} из {max_slots}"
+    )
+    await _safe_send(bot, author_id, text)
