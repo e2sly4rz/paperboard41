@@ -1,9 +1,3 @@
-
----
-
-## `docs/CHANGELOG.md` — история изменений
-
-```markdown
 # Changelog
 
 ## [Текущая версия]
