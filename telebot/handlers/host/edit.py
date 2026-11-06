@@ -8,8 +8,9 @@ from database.queries import (
     get_night,
     update_night_date,
     update_night_location,
+    get_active_poll_for_night,
 )
-from keyboards.menus import host_night_card, cancel_edit
+from keyboards.menus import host_night_card_with_poll, cancel_edit
 from states.states import EditNight
 from utils import fmt_date
 
@@ -55,6 +56,7 @@ async def save_date(message: Message, state: FSMContext) -> None:
     await state.clear()
 
     night = await get_night(night_id)
+    poll = await get_active_poll_for_night(night_id)
     text = (
         f"✅ Дата обновлена: {fmt_date(night['date'])}\n\n"
         f"🎲 Игротека\n"
@@ -64,7 +66,15 @@ async def save_date(message: Message, state: FSMContext) -> None:
         f"Записей: {night['total_taken']}"
     )
     can_manage = await can_manage_night(message.from_user.id, night)
-    await message.answer(text, reply_markup=host_night_card(night_id, is_owner=can_manage))
+    await message.answer(
+        text,
+        reply_markup=host_night_card_with_poll(
+            night_id,
+            is_owner=can_manage,
+            has_active_poll=bool(poll),
+            has_any_poll=bool(poll),
+        ),
+    )
 
 
 @router.callback_query(F.data.startswith("hn_loc:"))
@@ -103,6 +113,7 @@ async def save_location(message: Message, state: FSMContext) -> None:
     await state.clear()
 
     night = await get_night(night_id)
+    poll = await get_active_poll_for_night(night_id)
     text = (
         f"✅ Место обновлено.\n\n"
         f"🎲 Игротека\n"
@@ -112,4 +123,12 @@ async def save_location(message: Message, state: FSMContext) -> None:
         f"Записей: {night['total_taken']}"
     )
     can_manage = await can_manage_night(message.from_user.id, night)
-    await message.answer(text, reply_markup=host_night_card(night_id, is_owner=can_manage))
+    await message.answer(
+        text,
+        reply_markup=host_night_card_with_poll(
+            night_id,
+            is_owner=can_manage,
+            has_active_poll=bool(poll),
+            has_any_poll=bool(poll),
+        ),
+    )

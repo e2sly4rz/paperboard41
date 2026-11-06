@@ -9,9 +9,11 @@ from aiogram_calendar import SimpleCalendar, SimpleCalendarCallback
 
 from database.queries import (
     get_game,
+    get_night,
     create_game_night,
     add_session,
     search_games,
+    get_active_poll_for_night,
 )
 from keyboards.menus import (
     main_menu,
@@ -20,9 +22,10 @@ from keyboards.menus import (
     time_start_picker,
     duration_picker,
     slots_picker_autofill,
+    host_night_card_with_poll,
 )
 from states.states import CreateNight
-from utils import is_host_or_admin
+from utils import is_host_or_admin, fmt_date
 
 from ._helpers import add_minutes
 
@@ -30,11 +33,7 @@ router = Router()
 
 
 def _make_calendar() -> SimpleCalendar:
-    """Создаёт календарь с русской локалью, если она доступна.
-
-    Если локаль не установлена (например, в systemd-сервисе без LANG/LC_ALL),
-    откатывается на английский календарь — бот не падает.
-    """
+    """Создаёт календарь с русской локалью, если она доступна."""
     try:
         return SimpleCalendar(locale="ru_RU.UTF-8", show_alerts=True)
     except locale.Error:
@@ -354,7 +353,8 @@ async def host_finish(call: CallbackQuery, state: FSMContext) -> None:
     data = await state.get_data()
     await state.clear()
 
-    if not data.get("night_id"):
+    night_id = data.get("night_id")
+    if not night_id:
         await call.message.edit_text(
             "Игротека не создана: не добавлено ни одной игры.",
             reply_markup=main_menu(is_host_user, call.from_user.id),
@@ -362,13 +362,26 @@ async def host_finish(call: CallbackQuery, state: FSMContext) -> None:
         await call.answer()
         return
 
-    date_display = data.get("date_display", data.get("date", "—"))
-    location = data.get("location", "—")
+    night = await get_night(night_id)
+    poll = await get_active_poll_for_night(night_id)
+
+    text = (
+        f"✅ <b>Игротека создана</b>\n\n"
+        f"📅 {fmt_date(night['date'])}\n"
+        f"📍 {night['location']}\n"
+        f"Игр: {night['sessions_count']} • Записей: {night['total_taken']}\n\n"
+        f"Игроки увидят её в «📅 Расписание»."
+    )
 
     await call.message.edit_text(
-        f"✅ Игротека на {date_display} ({location}) создана.\n"
-        f"Игроки смогут увидеть её в разделе «Расписание».",
-        reply_markup=main_menu(is_host_user, call.from_user.id),
+        text,
+        parse_mode="HTML",
+        reply_markup=host_night_card_with_poll(
+            night_id,
+            is_owner=True,
+            has_active_poll=bool(poll),
+            has_any_poll=bool(poll),
+        ),
     )
     await call.answer()
 

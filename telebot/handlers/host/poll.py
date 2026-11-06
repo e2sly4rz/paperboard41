@@ -54,7 +54,8 @@ async def poll_create(call: CallbackQuery) -> None:
         f"Игроки увидят опрос в карточке игротеки в «📅 Расписание».",
         parse_mode="HTML",
         reply_markup=host_night_card_with_poll(
-            night_id, is_owner=True, has_poll=True
+            night_id, is_owner=True,
+            has_active_poll=True, has_any_poll=True,
         ),
     )
     await call.answer()
@@ -81,7 +82,8 @@ async def poll_results(call: CallbackQuery) -> None:
             f"Пока никто не ответил.",
             parse_mode="HTML",
             reply_markup=host_night_card_with_poll(
-                night_id, is_owner=True, has_poll=True
+                night_id, is_owner=True,
+                has_active_poll=True, has_any_poll=True,
             ),
         )
         await call.answer()
@@ -134,7 +136,8 @@ async def poll_results(call: CallbackQuery) -> None:
         text,
         parse_mode="HTML",
         reply_markup=host_night_card_with_poll(
-            night_id, is_owner=True, has_poll=True
+            night_id, is_owner=True,
+            has_active_poll=True, has_any_poll=True,
         ),
     )
     await call.answer()
@@ -161,7 +164,8 @@ async def poll_close(call: CallbackQuery) -> None:
         f"Результаты больше не принимаются.",
         parse_mode="HTML",
         reply_markup=host_night_card_with_poll(
-            night_id, is_owner=True, has_poll=False
+            night_id, is_owner=True,
+            has_active_poll=False, has_any_poll=True,
         ),
     )
     await call.answer()

@@ -193,17 +193,25 @@ async def poll_pick_from(call: CallbackQuery, state: FSMContext) -> None:
 async def poll_pick_to(call: CallbackQuery, state: FSMContext) -> None:
     time_to = call.data.split(":", 1)[1]
     data = await state.get_data()
+    time_from = data["time_from"]
+
+    if time_to <= time_from:
+        await call.answer(
+            "Время окончания должно быть позже начала. Выберите ещё раз.",
+            show_alert=True,
+        )
+        return
 
     await upsert_availability_response(
         data["poll_id"],
         call.from_user.id,
-        data["time_from"],
+        time_from,
         time_to,
     )
     await state.clear()
 
     await call.message.edit_text(
-        f"✅ Ваше время: <b>{data['time_from']}–{time_to}</b>\n\n"
+        f"✅ Ваше время: <b>{time_from}–{time_to}</b>\n\n"
         "Спасибо! Хост увидит ваш ответ.",
         parse_mode="HTML",
         reply_markup=main_menu(False, call.from_user.id),

@@ -53,6 +53,11 @@ def nights_list(nights: list[dict]) -> InlineKeyboardMarkup:
 
 
 def sessions_list(night_id: int, sessions: list[dict]) -> InlineKeyboardMarkup:
+    """Список игр — каждая игра одной кнопкой с полной информацией.
+
+    Маркер заполненности — по проценту:
+    🟢 0–25%, 🟡 26–50%, 🟠 51–75%, 🔴 76–99%, ⛔ 100%.
+    """
     kb = InlineKeyboardBuilder()
     for s in sessions:
         lock = "🔒 " if s["is_subscriber_only"] else ""
@@ -141,9 +146,46 @@ def host_menu_empty() -> InlineKeyboardMarkup:
 # ---------- Клавиатуры хоста ----------
 
 def host_night_card(night_id: int, is_owner: bool = True) -> InlineKeyboardMarkup:
+    """Базовая карточка игротеки (без опроса)."""
     kb = InlineKeyboardBuilder()
     kb.button(text="➕ Добавить игру", callback_data=f"hn_add:{night_id}")
     kb.button(text="🎲 Управление играми", callback_data=f"hn_sessions:{night_id}")
+    if is_owner:
+        kb.button(text="📅 Изменить дату", callback_data=f"hn_date:{night_id}")
+        kb.button(text="📍 Изменить место", callback_data=f"hn_loc:{night_id}")
+        kb.button(text="🗑 Удалить игротеку", callback_data=f"hn_del:{night_id}")
+    kb.button(text="⬅️ К списку", callback_data="host_menu")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def host_night_card_with_poll(night_id: int, is_owner: bool = True,
+                              has_active_poll: bool = False,
+                              has_any_poll: bool = False) -> InlineKeyboardMarkup:
+    """Карточка игротеки с кнопками опроса.
+
+    has_active_poll — есть открытый опрос (Результаты + Закрыть).
+    has_any_poll — есть закрытый опрос (Результаты + Создать новый).
+    Если оба False — Создать опрос.
+    """
+    kb = InlineKeyboardBuilder()
+    kb.button(text="➕ Добавить игру", callback_data=f"hn_add:{night_id}")
+    kb.button(text="🎲 Управление играми", callback_data=f"hn_sessions:{night_id}")
+
+    if has_active_poll:
+        kb.button(text="📊 Результаты опроса",
+                  callback_data=f"poll_results:{night_id}")
+        kb.button(text="🔒 Закрыть опрос",
+                  callback_data=f"poll_close:{night_id}")
+    elif has_any_poll:
+        kb.button(text="📊 Результаты опроса",
+                  callback_data=f"poll_results:{night_id}")
+        kb.button(text="📊 Создать новый опрос",
+                  callback_data=f"poll_create:{night_id}")
+    else:
+        kb.button(text="📊 Создать опрос о времени",
+                  callback_data=f"poll_create:{night_id}")
+
     if is_owner:
         kb.button(text="📅 Изменить дату", callback_data=f"hn_date:{night_id}")
         kb.button(text="📍 Изменить место", callback_data=f"hn_loc:{night_id}")
@@ -284,11 +326,11 @@ def slots_picker_autofill(game: dict,
     kb.adjust(1)
     return kb.as_markup()
 
+
 # ---------- Опрос о времени ----------
 
 def poll_time_grid(prefix: str, start_hour: int = 10,
                    end_hour: int = 23) -> InlineKeyboardMarkup:
-    """Сетка часов с шагом 1 час для опроса."""
     kb = InlineKeyboardBuilder()
     for hour in range(start_hour, end_hour + 1):
         t = f"{hour:02d}:00"
@@ -301,7 +343,6 @@ def poll_time_grid(prefix: str, start_hour: int = 10,
 def poll_time_grid_after(prefix: str, after: str,
                          start_hour: int = 10,
                          end_hour: int = 23) -> InlineKeyboardMarkup:
-    """Сетка часов, начиная с after (исключительно)."""
     kb = InlineKeyboardBuilder()
     after_h = int(after.split(":")[0])
     for hour in range(max(start_hour, after_h + 1), end_hour + 1):
@@ -309,35 +350,4 @@ def poll_time_grid_after(prefix: str, after: str,
         kb.button(text=t, callback_data=f"{prefix}:{t}")
     kb.button(text="❌ Отмена", callback_data="back_main")
     kb.adjust(4)
-    return kb.as_markup()
-
-
-def host_night_card_with_poll(night_id: int, is_owner: bool = True,
-                              has_poll: bool = False) -> InlineKeyboardMarkup:
-    """Карточка игротеки с кнопками опроса для хоста."""
-    kb = InlineKeyboardBuilder()
-    kb.button(text="➕ Добавить игру", callback_data=f"hn_add:{night_id}")
-    kb.button(text="🎲 Управление играми", callback_data=f"hn_sessions:{night_id}")
-    if has_poll:
-        kb.button(text="📊 Результаты опроса",
-                  callback_data=f"poll_results:{night_id}")
-        kb.button(text="🔒 Закрыть опрос",
-                  callback_data=f"poll_close:{night_id}")
-    else:
-        kb.button(text="📊 Создать опрос о времени",
-                  callback_data=f"poll_create:{night_id}")
-    if is_owner:
-        kb.button(text="📅 Изменить дату", callback_data=f"hn_date:{night_id}")
-        kb.button(text="📍 Изменить место", callback_data=f"hn_loc:{night_id}")
-        kb.button(text="🗑 Удалить игротеку", callback_data=f"hn_del:{night_id}")
-    kb.button(text="⬅️ К списку", callback_data="host_menu")
-    kb.adjust(1)
-    return kb.as_markup()
-
-def host_session_participants(night_id: int,
-                              session_id: int) -> InlineKeyboardMarkup:
-    """Возврат из списка участников игры в карточку игротеки."""
-    kb = InlineKeyboardBuilder()
-    kb.button(text="⬅️ К игротеке", callback_data=f"hn:{night_id}")
-    kb.adjust(1)
     return kb.as_markup()

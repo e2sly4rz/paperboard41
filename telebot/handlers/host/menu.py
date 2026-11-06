@@ -4,16 +4,14 @@ from aiogram.types import CallbackQuery
 from database.queries import (
     get_night,
     list_all_upcoming_nights,
-    get_night_sessions_for_edit,
     get_session,
-    get_session_registrations_full,
+    get_all_night_registrations,
     get_active_poll_for_night,
 )
 from keyboards.menus import (
     host_menu_with_nights,
     host_menu_empty,
     host_night_card_with_poll,
-    host_session_participants,
 )
 from utils import is_admin, is_host_or_admin, fmt_date
 
@@ -68,11 +66,32 @@ async def night_card(call: CallbackQuery) -> None:
 
     can_manage = await can_manage_night(call.from_user.id, night)
     is_own = night["host_telegram_id"] == call.from_user.id
-    sessions = await get_night_sessions_for_edit(night_id)
-    poll = await get_active_poll_for_night(night_id) if can_manage else None
+    active_poll = await get_active_poll_for_night(night_id) if can_manage else None
+
+    # Собираем список игр с участниками
+    rows = await get_all_night_registrations(night_id)
+    sessions: dict[int, dict] = {}
+    for r in rows:
+        sid = r["session_id"]
+        if sid not in sessions:
+            sessions[sid] = {
+                "time_start": r["time_start"],
+                "time_end": r["time_end"],
+                "game_title": r["game_title"],
+                "max_slots": r["max_slots"],
+                "slots_taken": r["slots_taken"],
+                "players": [],
+            }
+        if r["telegram_id"] is not None:
+            sessions[sid]["players"].append({
+                "first_name": r["first_name"],
+                "last_name": r["last_name"],
+                "username": r["username"],
+            })
 
     lines = [
-        f"🎲 <b>Игротека {fmt_date(night['date'])}</b>",
+        "🎲 <b>Игротека</b>",
+        f"📅 {fmt_date(night['date'])}",
         f"📍 {night['location']}",
         f"Игр: {night['sessions_count']} • Записей: {night['total_taken']}",
     ]
@@ -81,21 +100,40 @@ async def night_card(call: CallbackQuery) -> None:
     elif not can_manage:
         lines.append("<i>(игротека другого хоста)</i>")
 
-    if poll and can_manage:
+    if active_poll and can_manage:
         lines.append("\n📊 Опрос о времени активен.")
 
     if not sessions:
         lines.append("\n<i>В этой игротеке пока нет игр.</i>")
     else:
-        lines.append("\nНажмите на игру, чтобы увидеть участников:")
+        lines.append("\n👥 <b>Участники:</b>")
+        for s in sessions.values():
+            time_range = f"{s['time_start']}–{s['time_end'] or '?'}"
+            lines.append(
+                f"\n🎲 <b>{s['game_title']}</b>\n"
+                f"⏰ {time_range} • занято {s['slots_taken']} из {s['max_slots']}"
+            )
+            if not s["players"]:
+                lines.append("— никто не записан")
+            else:
+                for i, p in enumerate(s["players"], 1):
+                    name_parts = [p["first_name"] or "", p["last_name"] or ""]
+                    name = " ".join(x for x in name_parts if x).strip() or "Без имени"
+                    username = f" (@{p['username']})" if p["username"] else ""
+                    lines.append(f"{i}. {name}{username}")
+
+    text = "\n".join(lines)
+    if len(text) > 4000:
+        text = text[:3990] + "\n\n<i>…список обрезан</i>"
 
     await call.message.edit_text(
-        "\n".join(lines),
+        text,
         parse_mode="HTML",
         reply_markup=host_night_card_with_poll(
             night_id,
             is_owner=can_manage,
-            has_poll=bool(poll) if can_manage else False,
+            has_active_poll=bool(active_poll) if can_manage else False,
+            has_any_poll=bool(active_poll) if can_manage else False,
         ),
     )
     await call.answer()
@@ -103,6 +141,7 @@ async def night_card(call: CallbackQuery) -> None:
 
 @router.callback_query(F.data.startswith("hn_part:"))
 async def session_participants(call: CallbackQuery) -> None:
+    """Оставлен для совместимости: если где-то ещё есть кнопка hn_part."""
     if not await is_host_or_admin(call.from_user.id):
         await call.answer("Только для организаторов", show_alert=True)
         return
@@ -127,35 +166,5 @@ async def session_participants(call: CallbackQuery) -> None:
         await call.answer("Нет доступа", show_alert=True)
         return
 
-    registrants = await get_session_registrations_full(session_id)
-
-    taken = session["slots_taken"]
-    total = session["max_slots"]
-    time_range = f"{session['time_start']}–{session['time_end'] or '?'}"
-
-    lines = [
-        f"🎲 <b>{session['title']}</b>",
-        f"⏰ {time_range} • занято {taken} из {total}",
-        f"📅 {fmt_date(night['date'])} • {night['location']}",
-    ]
-
-    if not registrants:
-        lines.append("\n<i>Пока никто не записался.</i>")
-    else:
-        lines.append("\n<b>Участники:</b>")
-        for i, r in enumerate(registrants, 1):
-            name_parts = [r["first_name"] or "", r.get("last_name") or ""]
-            name = " ".join(x for x in name_parts if x).strip() or "Без имени"
-            username = f" (@{r['username']})" if r.get("username") else ""
-            lines.append(f"{i}. {name}{username}")
-
-    text = "\n".join(lines)
-    if len(text) > 4000:
-        text = text[:3990] + "\n\n<i>…список обрезан</i>"
-
-    await call.message.edit_text(
-        text,
-        parse_mode="HTML",
-        reply_markup=host_session_participants(night_id, session_id),
-    )
-    await call.answer()
+    # Просто возвращаем в карточку — там уже есть весь список
+    await call.answer("Список участников — в карточке игротеки")

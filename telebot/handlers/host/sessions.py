@@ -14,9 +14,10 @@ from database.queries import (
     add_session,
     delete_session,
     search_games,
+    get_active_poll_for_night,
 )
 from keyboards.menus import (
-    host_night_card,
+    host_night_card_with_poll,
     host_sessions_list,
     confirm_delete_session,
     games_search_results,
@@ -72,6 +73,7 @@ async def sessions_manage(call: CallbackQuery) -> None:
             return
 
     if not sessions:
+        poll = await get_active_poll_for_night(night_id)
         await call.message.edit_text(
             f"🎲 Игротека\n"
             f"Дата: {fmt_date(night['date'])}\n"
@@ -79,7 +81,12 @@ async def sessions_manage(call: CallbackQuery) -> None:
             f"Игр: 0\n"
             f"Записей: 0\n\n"
             f"В игротеке пока нет игр. Добавьте первую.",
-            reply_markup=host_night_card(night_id, is_owner=can_manage),
+            reply_markup=host_night_card_with_poll(
+                night_id,
+                is_owner=can_manage,
+                has_active_poll=bool(poll),
+                has_any_poll=bool(poll),
+            ),
         )
         await call.answer()
         return
@@ -209,9 +216,15 @@ async def session_delete_confirm_yes(call: CallbackQuery) -> None:
     can_manage = await can_manage_night(call.from_user.id, night)
     sessions = await get_night_sessions_for_edit(night_id)
     if not sessions:
+        poll = await get_active_poll_for_night(night_id)
         await call.message.edit_text(
             "Все игры удалены. В игротеке больше нет сессий.",
-            reply_markup=host_night_card(night_id, is_owner=can_manage),
+            reply_markup=host_night_card_with_poll(
+                night_id,
+                is_owner=can_manage,
+                has_active_poll=bool(poll),
+                has_any_poll=bool(poll),
+            ),
         )
     else:
         await call.message.edit_text(
@@ -264,10 +277,16 @@ async def _finalize_add_session(message, state: FSMContext,
             ),
         )
     else:
+        poll = await get_active_poll_for_night(night_id)
         await message.answer(
             f"✅ Игра «{game['title']}» добавлена в игротеку "
             f"{fmt_date(night['date'])} ({night['location']}).",
-            reply_markup=host_night_card(night_id, is_owner=False),
+            reply_markup=host_night_card_with_poll(
+                night_id,
+                is_owner=False,
+                has_active_poll=bool(poll),
+                has_any_poll=bool(poll),
+            ),
         )
 
 
