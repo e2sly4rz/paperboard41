@@ -3,6 +3,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from database.db import db
 from database.queries import (
     list_upcoming_nights,
     get_night,
@@ -103,12 +104,37 @@ async def show_session(call: CallbackQuery) -> None:
     user = await get_user(call.from_user.id)
     level = user["subscriber_level"] if user else "passenger"
 
+    # Уже записан?
+    async with db.conn.execute(
+        "SELECT 1 FROM registrations WHERE session_id = ? AND user_telegram_id = ?",
+        (session_id, call.from_user.id),
+    ) as cur:
+        already_registered = await cur.fetchone() is not None
+
+    if already_registered:
+        await call.answer(
+            "✅ Вы уже записаны на эту игру.\n"
+            "Отменить запись можно в разделе «🎲 Мои записи».",
+            show_alert=True,
+        )
+        return
+
+    # Конфликт по времени?
     conflict = await find_session_conflict_for_user(session_id, call.from_user.id)
+    if conflict:
+        c_start = conflict["time_start"]
+        c_end = conflict["time_end"] or "?"
+        await call.answer(
+            f"⚠️ Пересекается с вашей записью:\n"
+            f"{conflict['game_title']} ({c_start}–{c_end}).\n"
+            f"Сначала отмените ту запись в «🎲 Мои записи».",
+            show_alert=True,
+        )
+        return
 
     can_register = (
         s["free_slots"] > 0
         and (not s["is_subscriber_only"] or level in ("provodnik", "host"))
-        and conflict is None
     )
 
     taken = s["max_slots"] - s["free_slots"]
@@ -121,18 +147,6 @@ async def show_session(call: CallbackQuery) -> None:
     )
     if s["is_subscriber_only"]:
         text += "\n🔒 Только для подписчиков «Проводник»."
-
-    if conflict:
-        c_start = conflict["time_start"]
-        c_end = conflict["time_end"] or "?"
-        text += (
-            f"\n\n⚠️ <b>Пересекается с вашей записью:</b>\n"
-            f"🎲 {conflict['game_title']}\n"
-            f"⏰ {c_start}–{c_end}\n"
-            f"📍 {conflict['location']}\n\n"
-            f"Чтобы записаться сюда, сначала отмените ту запись "
-            f"в разделе «🎲 Мои записи»."
-        )
 
     await call.message.edit_text(
         text,

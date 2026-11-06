@@ -52,16 +52,16 @@ def nights_list(nights: list[dict]) -> InlineKeyboardMarkup:
 
 
 def sessions_list(night_id: int, sessions: list[dict]) -> InlineKeyboardMarkup:
-    """Список игр — каждая игра одной кнопкой с полной информацией.
+    """Список игр — каждая игра одной кнопкой.
 
-    Маркер заполненности — по проценту:
+    В кнопке только маркер заполненности по проценту:
     🟢 0–25%, 🟡 26–50%, 🟠 51–75%, 🔴 76–99%, ⛔ 100%.
-    Если conflict — добавляется ⚠️ в начало.
+
+    Статусы «уже записан», «только для Проводника», «конфликт»
+    показываются при нажатии — всплывающим или в карточке.
     """
     kb = InlineKeyboardBuilder()
     for s in sessions:
-        lock = "🔒 " if s["is_subscriber_only"] else ""
-        conflict = "⚠️ " if s.get("conflict") else ""
         taken = s["max_slots"] - s["free_slots"]
         total = s["max_slots"]
 
@@ -83,8 +83,7 @@ def sessions_list(night_id: int, sessions: list[dict]) -> InlineKeyboardMarkup:
 
         title = _short_title(s["title"])
         kb.button(
-            text=f"{marker}{lock}{s['time_start']} · {title} · "
-                 f"{taken}/{total}{conflict}",
+            text=f"{marker}{s['time_start']} · {title} · {taken}/{total}",
             callback_data=f"session:{s['id']}",
         )
 

@@ -304,10 +304,7 @@ async def find_host_conflict(
     time_end: str | None,
     exclude_session_id: int | None = None,
 ) -> dict | None:
-    """Ищет игру, которую ведёт этот хост в тот же день и пересекается по времени.
-
-    Учитываются только сессии, где created_by_user_id = host_id.
-    """
+    """Ищет игру, которую ведёт этот хост в тот же день и пересекается по времени."""
     end = time_end or time_start
 
     query = """
@@ -478,11 +475,7 @@ async def list_user_registrations(user_id: int) -> list[dict]:
 async def cancel_registration(reg_id: int, user_id: int) -> dict | None:
     """Отменяет запись.
 
-    Возвращает данные отменённой сессии (для уведомлений) или None,
-    если запись не найдена.
-
-    Поля результата: session_id, game_title, date, location,
-    time_start, time_end, slots_taken, max_slots.
+    Возвращает данные отменённой сессии (для уведомлений) или None.
     """
     async with db.conn.execute(
         """SELECT r.session_id,
@@ -511,7 +504,6 @@ async def cancel_registration(reg_id: int, user_id: int) -> dict | None:
     )
     await db.conn.commit()
 
-    # Читаем актуальное slots_taken после декремента
     async with db.conn.execute(
         "SELECT slots_taken FROM game_sessions WHERE id = ?",
         (session_id,),
