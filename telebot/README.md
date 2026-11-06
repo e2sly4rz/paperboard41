@@ -34,6 +34,7 @@
 
 ## Структура проекта
 
+```
 club_bot/
 ├── main.py                  # точка входа
 ├── config.py                # чтение .env
@@ -61,6 +62,7 @@ club_bot/
 │   └── access.py            # AccessMiddleware
 └── states/
     └── states.py            # FSM-состояния
+```
 
 ## Документация
 
