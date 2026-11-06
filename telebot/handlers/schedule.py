@@ -12,6 +12,7 @@ from database.queries import (
     get_user,
     get_active_poll_for_night,
     upsert_availability_response,
+    find_session_conflict_for_user,
 )
 from keyboards.menus import (
     nights_list,
@@ -100,9 +101,11 @@ async def show_session(call: CallbackQuery) -> None:
 
     user = await get_user(call.from_user.id)
     level = user["subscriber_level"] if user else "passenger"
+    conflict = await find_session_conflict_for_user(session_id, call.from_user.id)
     can_register = (
         s["free_slots"] > 0
         and (not s["is_subscriber_only"] or level in ("provodnik", "host"))
+        and conflict is None
     )
 
     taken = s["max_slots"] - s["free_slots"]
@@ -115,6 +118,18 @@ async def show_session(call: CallbackQuery) -> None:
     )
     if s["is_subscriber_only"]:
         text += "\n🔒 Только для подписчиков «Проводник»."
+
+    if conflict:
+        c_start = conflict["time_start"]
+        c_end = conflict["time_end"] or "?"
+        text += (
+            f"\n\n⚠️ <b>Пересекается с вашей записью:</b>\n"
+            f"🎲 {conflict['game_title']}\n"
+            f"⏰ {c_start}–{c_end}\n"
+            f"📍 {conflict['location']}\n\n"
+            f"Чтобы записаться сюда, сначала отмените ту запись "
+            f"в разделе «🎲 Мои записи»."
+        )
 
     await call.message.edit_text(
         text,

@@ -83,8 +83,8 @@ def sessions_list(night_id: int, sessions: list[dict]) -> InlineKeyboardMarkup:
 
         title = _short_title(s["title"])
         kb.button(
-            text=f"{conflict}{marker}{lock}{s['time_start']} · {title} · "
-                 f"{taken}/{total}",
+            text=f"{marker}{lock}{s['time_start']} · {title} · "
+                 f"{taken}/{total}{conflict}",
             callback_data=f"session:{s['id']}",
         )
 

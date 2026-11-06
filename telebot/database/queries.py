@@ -708,3 +708,31 @@ async def list_all_users_grouped() -> dict:
             if level in groups:
                 groups[level].append(r)
     return groups
+
+async def find_session_conflict_for_user(
+    session_id: int, user_id: int
+) -> dict | None:
+    """Ищет запись пользователя, которая пересекается с указанной сессией.
+
+    Возвращает конфликтующую сессию или None.
+    """
+    async with db.conn.execute(
+        """SELECT gs2.time_start, gs2.time_end,
+                  g2.title AS game_title,
+                  gn2.location
+           FROM game_sessions gs1
+           JOIN game_nights gn1 ON gn1.id = gs1.game_night_id
+           JOIN game_sessions gs2 ON gs2.game_night_id = gs1.game_night_id
+           JOIN games g2       ON g2.id = gs2.game_id
+           JOIN game_nights gn2 ON gn2.id = gs2.game_night_id
+           JOIN registrations r ON r.session_id = gs2.id
+           WHERE gs1.id = ?
+             AND r.user_telegram_id = ?
+             AND gs2.id != gs1.id
+             AND gs2.time_start < COALESCE(gs1.time_end, gs1.time_start)
+             AND gs1.time_start < COALESCE(gs2.time_end, gs2.time_start)
+           LIMIT 1""",
+        (session_id, user_id),
+    ) as cur:
+        row = await cur.fetchone()
+        return dict(row) if row else None
