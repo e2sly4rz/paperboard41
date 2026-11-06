@@ -14,6 +14,7 @@ from database.queries import (
     add_session,
     search_games,
     get_active_poll_for_night,
+    find_host_conflict,
 )
 from keyboards.menus import (
     main_menu,
@@ -33,7 +34,6 @@ router = Router()
 
 
 def _make_calendar() -> SimpleCalendar:
-    """Создаёт календарь с русской локалью, если она доступна."""
     try:
         return SimpleCalendar(locale="ru_RU.UTF-8", show_alerts=True)
     except locale.Error:
@@ -44,6 +44,29 @@ async def _finalize_session(message, state: FSMContext,
                             slots: int, user_id: int) -> None:
     data = await state.get_data()
     game = await get_game(data["game_id"])
+
+    # Проверка: у хоста уже есть игра в это время в этот день?
+    conflict = await find_host_conflict(
+        user_id,
+        data["date"],
+        data["time_start"],
+        data["time_end"],
+    )
+    if conflict:
+        c_start = conflict["time_start"]
+        c_end = conflict["time_end"] or "?"
+        await state.set_state(CreateNight.searching_game)
+        await message.answer(
+            f"⚠️ <b>У вас уже есть игра в это время</b>\n\n"
+            f"🎲 {conflict['game_title']}\n"
+            f"⏰ {c_start}–{c_end}\n\n"
+            f"Нельзя добавить ещё одну игру на это же время. "
+            f"Выберите другое время или другую дату.\n\n"
+            f"Введите название игры для поиска:",
+            parse_mode="HTML",
+            reply_markup=search_prompt_keyboard("host_cancel"),
+        )
+        return
 
     night_id = data.get("night_id")
     if night_id is None:

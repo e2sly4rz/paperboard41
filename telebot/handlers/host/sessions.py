@@ -15,6 +15,7 @@ from database.queries import (
     delete_session,
     search_games,
     get_active_poll_for_night,
+    find_host_conflict,
 )
 from keyboards.menus import (
     host_night_card_with_poll,
@@ -173,14 +174,11 @@ async def session_delete_confirm_yes(call: CallbackQuery) -> None:
         await call.answer("Нет доступа", show_alert=True)
         return
 
-    # --- Собираем данные ДО удаления ---
     session = await get_session(session_id)
     registrants = await get_session_registrations_full(session_id)
 
-    # --- Удаляем ---
     await delete_session(session_id)
 
-    # --- Рассылаем уведомления ---
     if session:
         await notify_session_deleted(
             call.bot,
@@ -212,7 +210,6 @@ async def session_delete_confirm_yes(call: CallbackQuery) -> None:
             time_end=session["time_end"],
         )
 
-    # --- Обновляем экран ---
     can_manage = await can_manage_night(call.from_user.id, night)
     sessions = await get_night_sessions_for_edit(night_id)
     if not sessions:
@@ -246,6 +243,35 @@ async def _finalize_add_session(message, state: FSMContext,
     night_id = data["night_id"]
     game_id = data["game_id"]
 
+    night = await get_night(night_id)
+    if not night:
+        await state.clear()
+        await message.answer("Игротека не найдена.")
+        return
+
+    # Проверка: у хоста уже есть игра в это время в этот день?
+    conflict = await find_host_conflict(
+        user_id,
+        night["date"],
+        data["time_start"],
+        data["time_end"],
+    )
+    if conflict:
+        c_start = conflict["time_start"]
+        c_end = conflict["time_end"] or "?"
+        await state.set_state(AddSessionToNight.searching_game)
+        await message.answer(
+            f"⚠️ <b>У вас уже есть игра в это время</b>\n\n"
+            f"🎲 {conflict['game_title']}\n"
+            f"⏰ {c_start}–{c_end}\n\n"
+            f"Нельзя добавить ещё одну игру на это же время. "
+            f"Выберите другое время.\n\n"
+            f"Введите название игры для поиска:",
+            parse_mode="HTML",
+            reply_markup=search_prompt_keyboard(f"hn_sessions:{night_id}"),
+        )
+        return
+
     await add_session(
         night_id,
         game_id,
@@ -257,7 +283,6 @@ async def _finalize_add_session(message, state: FSMContext,
     await state.clear()
 
     game = await get_game(game_id)
-    night = await get_night(night_id)
     can_manage = await can_manage_night(user_id, night)
     sessions = await get_night_sessions_for_edit(night_id)
 

@@ -14,7 +14,6 @@ def _fmt_date(iso_date: str) -> str:
 
 
 def _short_title(title: str, max_len: int = 28) -> str:
-    """Обрезает длинное название с многоточием."""
     if len(title) <= max_len:
         return title
     return title[:max_len - 1].rstrip() + "…"
@@ -57,10 +56,12 @@ def sessions_list(night_id: int, sessions: list[dict]) -> InlineKeyboardMarkup:
 
     Маркер заполненности — по проценту:
     🟢 0–25%, 🟡 26–50%, 🟠 51–75%, 🔴 76–99%, ⛔ 100%.
+    Если conflict — добавляется ⚠️ в начало.
     """
     kb = InlineKeyboardBuilder()
     for s in sessions:
         lock = "🔒 " if s["is_subscriber_only"] else ""
+        conflict = "⚠️ " if s.get("conflict") else ""
         taken = s["max_slots"] - s["free_slots"]
         total = s["max_slots"]
 
@@ -82,7 +83,7 @@ def sessions_list(night_id: int, sessions: list[dict]) -> InlineKeyboardMarkup:
 
         title = _short_title(s["title"])
         kb.button(
-            text=f"{marker}{lock}{s['time_start']} · {title} · "
+            text=f"{conflict}{marker}{lock}{s['time_start']} · {title} · "
                  f"{taken}/{total}",
             callback_data=f"session:{s['id']}",
         )
@@ -146,7 +147,6 @@ def host_menu_empty() -> InlineKeyboardMarkup:
 # ---------- Клавиатуры хоста ----------
 
 def host_night_card(night_id: int, is_owner: bool = True) -> InlineKeyboardMarkup:
-    """Базовая карточка игротеки (без опроса)."""
     kb = InlineKeyboardBuilder()
     kb.button(text="➕ Добавить игру", callback_data=f"hn_add:{night_id}")
     kb.button(text="🎲 Управление играми", callback_data=f"hn_sessions:{night_id}")
@@ -162,12 +162,6 @@ def host_night_card(night_id: int, is_owner: bool = True) -> InlineKeyboardMarku
 def host_night_card_with_poll(night_id: int, is_owner: bool = True,
                               has_active_poll: bool = False,
                               has_any_poll: bool = False) -> InlineKeyboardMarkup:
-    """Карточка игротеки с кнопками опроса.
-
-    has_active_poll — есть открытый опрос (Результаты + Закрыть).
-    has_any_poll — есть закрытый опрос (Результаты + Создать новый).
-    Если оба False — Создать опрос.
-    """
     kb = InlineKeyboardBuilder()
     kb.button(text="➕ Добавить игру", callback_data=f"hn_add:{night_id}")
     kb.button(text="🎲 Управление играми", callback_data=f"hn_sessions:{night_id}")

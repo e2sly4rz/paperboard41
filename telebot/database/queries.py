@@ -223,6 +223,41 @@ async def get_night_sessions(night_id: int) -> list[dict]:
         return [dict(r) for r in await cur.fetchall()]
 
 
+async def get_night_sessions_with_conflicts(
+    night_id: int, user_id: int
+) -> list[dict]:
+    """Сессии игротеки + флаг conflict (пересекается с записью пользователя)."""
+    async with db.conn.execute(
+        """SELECT gs.id, gs.time_start, gs.time_end,
+                  gs.max_slots, gs.slots_taken,
+                  (gs.max_slots - gs.slots_taken) AS free_slots,
+                  gs.registration_opens_at,
+                  gs.registration_min_level,
+                  gs.registration_approved,
+                  g.title, g.genre, g.min_players, g.max_players,
+                  g.duration_min, g.duration_max, g.is_subscriber_only,
+                  gn.date,
+                  CASE WHEN EXISTS (
+                      SELECT 1
+                      FROM registrations r2
+                      JOIN game_sessions gs2 ON gs2.id = r2.session_id
+                      JOIN game_nights  gn2  ON gn2.id = gs2.game_night_id
+                      WHERE r2.user_telegram_id = ?
+                        AND gn2.date = gn.date
+                        AND gs2.id != gs.id
+                        AND gs2.time_start < COALESCE(gs.time_end, gs.time_start)
+                        AND gs.time_start < COALESCE(gs2.time_end, gs2.time_start)
+                  ) THEN 1 ELSE 0 END AS conflict
+           FROM game_sessions gs
+           JOIN games g       ON g.id  = gs.game_id
+           JOIN game_nights gn ON gn.id = gs.game_night_id
+           WHERE gs.game_night_id = ?
+           ORDER BY gs.time_start""",
+        (user_id, night_id),
+    ) as cur:
+        return [dict(r) for r in await cur.fetchall()]
+
+
 async def get_session(session_id: int) -> dict | None:
     async with db.conn.execute(
         """SELECT gs.*, g.title, g.genre, g.owner,
@@ -253,13 +288,51 @@ async def get_session_author(session_id: int) -> int | None:
 async def get_session_registrations_full(session_id: int) -> list[dict]:
     """Список записавшихся на сессию с telegram_id — для уведомлений."""
     async with db.conn.execute(
-        """SELECT u.telegram_id, u.first_name, u.username
+        """SELECT u.telegram_id, u.first_name, u.last_name, u.username
            FROM registrations r
            JOIN users u ON u.telegram_id = r.user_telegram_id
            WHERE r.session_id = ?""",
         (session_id,),
     ) as cur:
         return [dict(r) for r in await cur.fetchall()]
+
+
+async def find_host_conflict(
+    host_id: int,
+    date: str,
+    time_start: str,
+    time_end: str | None,
+    exclude_session_id: int | None = None,
+) -> dict | None:
+    """Ищет игру, которую ведёт этот хост в тот же день и пересекается по времени.
+
+    Учитываются только сессии, где created_by_user_id = host_id.
+    """
+    end = time_end or time_start
+
+    query = """
+        SELECT gs.id, gs.time_start, gs.time_end,
+               g.title AS game_title,
+               gn.date, gn.location
+        FROM game_sessions gs
+        JOIN games g       ON g.id  = gs.game_id
+        JOIN game_nights gn ON gn.id = gs.game_night_id
+        WHERE gs.created_by_user_id = ?
+          AND gn.date = ?
+          AND gs.time_start < ?
+          AND ? < COALESCE(gs.time_end, gs.time_start)
+    """
+    params: list = [host_id, date, end, time_start]
+
+    if exclude_session_id is not None:
+        query += " AND gs.id != ?"
+        params.append(exclude_session_id)
+
+    query += " LIMIT 1"
+
+    async with db.conn.execute(query, params) as cur:
+        row = await cur.fetchone()
+        return dict(row) if row else None
 
 
 # ---------- Записи на игры ----------
@@ -270,14 +343,17 @@ async def register_for_session(session_id: int, user_id: int) -> tuple[bool, str
 
         async with db.conn.execute(
             """SELECT gs.max_slots, gs.slots_taken,
+                      gs.time_start, gs.time_end,
                       gs.registration_opens_at,
                       gs.registration_min_level,
                       gs.registration_approved,
+                      gn.date,
                       g.is_subscriber_only,
                       u.subscriber_level
                FROM game_sessions gs
-               JOIN games g ON g.id = gs.game_id
-               JOIN users u ON u.telegram_id = ?
+               JOIN games g       ON g.id  = gs.game_id
+               JOIN game_nights gn ON gn.id = gs.game_night_id
+               JOIN users u       ON u.telegram_id = ?
                WHERE gs.id = ?""",
             (user_id, session_id),
         ) as cur:
@@ -308,6 +384,38 @@ async def register_for_session(session_id: int, user_id: int) -> tuple[bool, str
         if exists:
             await db.conn.rollback()
             return False, "Вы уже записаны на эту игру."
+
+        # Проверка пересечения с другими записями
+        async with db.conn.execute(
+            """SELECT gs.time_start, gs.time_end,
+                      g.title AS game_title,
+                      gn.location
+               FROM registrations r
+               JOIN game_sessions gs ON gs.id = r.session_id
+               JOIN games g       ON g.id  = gs.game_id
+               JOIN game_nights gn ON gn.id = gs.game_night_id
+               WHERE r.user_telegram_id = ?
+                 AND gn.date = ?
+                 AND gs.id != ?
+                 AND gs.time_start < ?
+                 AND ? < COALESCE(gs.time_end, gs.time_start)
+               LIMIT 1""",
+            (user_id, row["date"], session_id,
+             row["time_end"] or row["time_start"], row["time_start"]),
+        ) as cur:
+            conflict = await cur.fetchone()
+
+        if conflict:
+            await db.conn.rollback()
+            c_start = conflict["time_start"]
+            c_end = conflict["time_end"] or "?"
+            return (
+                False,
+                f"⏰ Конфликт по времени: вы уже записаны на "
+                f"«{conflict['game_title']}» "
+                f"({c_start}–{c_end}, {conflict['location']}). "
+                f"Сначала отмените ту запись."
+            )
 
         await db.conn.execute(
             "INSERT INTO registrations (session_id, user_telegram_id) VALUES (?, ?)",
@@ -498,7 +606,6 @@ async def log_day_notification(user_id: int, date: str, kind: str) -> None:
         )
         await db.conn.commit()
     except Exception:
-        # Уникальный индекс — значит, уже отправлено, молча игнорируем
         pass
 
 
@@ -563,6 +670,7 @@ async def close_availability_poll(poll_id: int) -> None:
     )
     await db.conn.commit()
 
+
 async def get_night_participants(night_id: int) -> list[dict]:
     """Уникальные пользователи, записанные хотя бы на одну игру игротеки."""
     async with db.conn.execute(
@@ -575,16 +683,9 @@ async def get_night_participants(night_id: int) -> list[dict]:
     ) as cur:
         return [dict(r) for r in await cur.fetchall()]
 
-async def list_all_users_grouped() -> dict:
-    """Список пользователей, сгруппированный по уровню.
 
-    Возвращает {
-        'host': [...],
-        'provodnik': [...],
-        'passenger': [...],
-        'pending': [...]  # is_approved = 0
-    }
-    """
+async def list_all_users_grouped() -> dict:
+    """Список пользователей, сгруппированный по уровню."""
     async with db.conn.execute(
         """SELECT telegram_id, username, first_name, last_name,
                   subscriber_level, is_approved

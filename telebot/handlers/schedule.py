@@ -6,7 +6,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from database.queries import (
     list_upcoming_nights,
     get_night,
-    get_night_sessions,
+    get_night_sessions_with_conflicts,
     get_session,
     register_for_session,
     get_user,
@@ -48,7 +48,7 @@ async def show_schedule(call: CallbackQuery) -> None:
 @router.callback_query(F.data.startswith("night:"))
 async def show_night(call: CallbackQuery) -> None:
     night_id = int(call.data.split(":")[1])
-    sessions = await get_night_sessions(night_id)
+    sessions = await get_night_sessions_with_conflicts(night_id, call.from_user.id)
 
     if not sessions:
         await call.message.edit_text(
