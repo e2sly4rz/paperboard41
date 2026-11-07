@@ -166,8 +166,8 @@ async def notify_game_author_registration(
         return
 
     text = (
-        f"🎲 <b>Новая запись на вашу игру</b>\n\n"
-        f"🎮 {game_title}\n"
+        f"<b>Новая запись на вашу игру</b>\n\n"
+        f"🎲 {game_title}\n"
         f"📅 {fmt_date(date_str)} • {time_start}–{time_end or '?'}\n"
         f"📍 {location}\n\n"
         f"Записался: {player_name}\n"
@@ -209,8 +209,8 @@ async def notify_game_author_cancellation(
         return
 
     text = (
-        f"🎲 <b>Игрок отменил запись</b>\n\n"
-        f"🎮 {game_title}\n"
+        f"<b>Игрок отменил запись</b>\n\n"
+        f"🎲 {game_title}\n"
         f"📅 {fmt_date(date_str)} • {time_start}–{time_end or '?'}\n"
         f"📍 {location}\n\n"
         f"Отменился: {player_name}\n"

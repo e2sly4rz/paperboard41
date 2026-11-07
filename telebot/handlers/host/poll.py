@@ -116,13 +116,6 @@ async def poll_results(call: CallbackQuery) -> None:
         bar = "█" * bar_len + "░" * (8 - bar_len)
         lines.append(f"{h:02d}:00  {bar} {c}")
 
-    best_hours = [h for h in hours if counts[h] == max_count and max_count > 0]
-    if best_hours:
-        lines.append(
-            f"\n🕐 Лучшее время: <b>{best_hours[0]:02d}:00</b> "
-            f"(совпадает у {max_count} чел.)"
-        )
-
     lines.append("\n<b>Ответы:</b>")
     for r in responses:
         name = r.get("first_name") or "Без имени"
