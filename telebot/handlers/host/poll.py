@@ -12,25 +12,32 @@ from database.queries import (
 from keyboards.menus import (
     host_night_card_with_poll,
 )
-from utils import fmt_date, safe_edit
+from utils import fmt_date, safe_edit, is_host_or_admin
 from notifications import notify_poll_created
-
-from ._helpers import can_manage_night
 
 router = Router()
 
 
 @router.callback_query(F.data.startswith("poll_create:"))
 async def poll_create(call: CallbackQuery) -> None:
+    if not await is_host_or_admin(call.from_user.id):
+        await call.answer("Только для организаторов", show_alert=True)
+        return
+
     night_id = int(call.data.split(":")[1])
     night = await get_night(night_id)
-    if not await can_manage_night(call.from_user.id, night):
-        await call.answer("Нет доступа", show_alert=True)
+    if not night:
+        await call.answer("Игротека не найдена", show_alert=True)
         return
 
     existing = await get_active_poll_for_night(night_id)
     if existing:
-        await call.answer("Опрос уже создан", show_alert=True)
+        await call.answer(
+            "В этой игротеке уже есть активный опрос. "
+            "Другой хост уже его создал — можно посмотреть результаты "
+            "или закрыть.",
+            show_alert=True,
+        )
         return
 
     await create_availability_poll(night_id, call.from_user.id)
@@ -54,7 +61,7 @@ async def poll_create(call: CallbackQuery) -> None:
         parse_mode="HTML",
         reply_markup=host_night_card_with_poll(
             night_id,
-            is_owner=True,
+            is_owner=False,           # не важно — кнопки опроса показываются всем хостам
             has_active_poll=True,
             has_any_poll=True,
         ),
@@ -64,10 +71,14 @@ async def poll_create(call: CallbackQuery) -> None:
 
 @router.callback_query(F.data.startswith("poll_results:"))
 async def poll_results(call: CallbackQuery) -> None:
+    if not await is_host_or_admin(call.from_user.id):
+        await call.answer("Только для организаторов", show_alert=True)
+        return
+
     night_id = int(call.data.split(":")[1])
     night = await get_night(night_id)
-    if not await can_manage_night(call.from_user.id, night):
-        await call.answer("Нет доступа", show_alert=True)
+    if not night:
+        await call.answer("Игротека не найдена", show_alert=True)
         return
 
     poll = await get_active_poll_for_night(night_id)
@@ -84,7 +95,7 @@ async def poll_results(call: CallbackQuery) -> None:
             f"Пока никто не ответил.",
             parse_mode="HTML",
             reply_markup=host_night_card_with_poll(
-                night_id, is_owner=True,
+                night_id, is_owner=False,
                 has_active_poll=True, has_any_poll=True,
             ),
         )
@@ -132,7 +143,7 @@ async def poll_results(call: CallbackQuery) -> None:
         text,
         parse_mode="HTML",
         reply_markup=host_night_card_with_poll(
-            night_id, is_owner=True,
+            night_id, is_owner=False,
             has_active_poll=True, has_any_poll=True,
         ),
     )
@@ -141,10 +152,14 @@ async def poll_results(call: CallbackQuery) -> None:
 
 @router.callback_query(F.data.startswith("poll_close:"))
 async def poll_close(call: CallbackQuery) -> None:
+    if not await is_host_or_admin(call.from_user.id):
+        await call.answer("Только для организаторов", show_alert=True)
+        return
+
     night_id = int(call.data.split(":")[1])
     night = await get_night(night_id)
-    if not await can_manage_night(call.from_user.id, night):
-        await call.answer("Нет доступа", show_alert=True)
+    if not night:
+        await call.answer("Игротека не найдена", show_alert=True)
         return
 
     poll = await get_active_poll_for_night(night_id)
@@ -161,7 +176,7 @@ async def poll_close(call: CallbackQuery) -> None:
         f"Результаты больше не принимаются.",
         parse_mode="HTML",
         reply_markup=host_night_card_with_poll(
-            night_id, is_owner=True,
+            night_id, is_owner=False,
             has_active_poll=False, has_any_poll=True,
         ),
     )

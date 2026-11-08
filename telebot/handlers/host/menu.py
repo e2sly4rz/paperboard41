@@ -68,7 +68,7 @@ async def night_card(call: CallbackQuery) -> None:
 
     can_manage = await can_manage_night(call.from_user.id, night)
     is_own = night["host_telegram_id"] == call.from_user.id
-    active_poll = await get_active_poll_for_night(night_id) if can_manage else None
+    active_poll = await get_active_poll_for_night(night_id)
 
     rows = await get_all_night_registrations(night_id)
     sessions: dict[int, dict] = {}
@@ -104,7 +104,7 @@ async def night_card(call: CallbackQuery) -> None:
     elif not can_manage:
         lines.append("<i>(игротека другого хоста)</i>")
 
-    if active_poll and can_manage:
+    if active_poll:
         lines.append("\n📊 Опрос о времени активен.")
 
     if not sessions:
@@ -137,8 +137,8 @@ async def night_card(call: CallbackQuery) -> None:
         reply_markup=host_night_card_with_poll(
             night_id,
             is_owner=can_manage,
-            has_active_poll=bool(active_poll) if can_manage else False,
-            has_any_poll=bool(active_poll) if can_manage else False,
+            has_active_poll=bool(active_poll),
+            has_any_poll=bool(active_poll),
             registration_open=bool(night["registration_open"]),
         ),
     )
