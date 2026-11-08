@@ -120,6 +120,7 @@ def host_menu_with_nights(nights: list[dict],
                           own_ids: set[int] | None = None) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.button(text="➕ Создать игротеку", callback_data="host_create")
+    kb.button(text="📚 Добавить игру в каталог", callback_data="host_add_game")
 
     for n in nights:
         is_own = own_ids is None or n["id"] in own_ids
@@ -138,6 +139,7 @@ def host_menu_with_nights(nights: list[dict],
 def host_menu_empty() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.button(text="➕ Создать игротеку", callback_data="host_create")
+    kb.button(text="📚 Добавить игру в каталог", callback_data="host_add_game")
     kb.button(text="⬅️ Назад", callback_data="back_main")
     kb.adjust(1)
     return kb.as_markup()

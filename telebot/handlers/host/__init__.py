@@ -1,6 +1,6 @@
 from aiogram import Router
 
-from . import menu, create, edit, sessions, delete, poll
+from . import menu, create, edit, sessions, delete, poll, game
 
 
 router = Router()
@@ -10,3 +10,4 @@ router.include_router(edit.router)
 router.include_router(sessions.router)
 router.include_router(delete.router)
 router.include_router(poll.router)
+router.include_router(game.router)

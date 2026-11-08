@@ -760,3 +760,37 @@ async def list_all_users_grouped() -> dict:
             if level in groups:
                 groups[level].append(r)
     return groups
+
+async def create_game(
+    title: str,
+    genre: str | None,
+    min_players: int,
+    max_players: int,
+    duration_min: int,
+    duration_max: int,
+    is_subscriber_only: int,
+    owner_user_id: int | None,
+    owner_label: str,
+) -> int:
+    """Создаёт игру в каталоге. Возвращает id."""
+    cur = await db.conn.execute(
+        """INSERT INTO games
+           (title, genre, min_players, max_players,
+            duration_min, duration_max, is_subscriber_only,
+            owner_user_id, owner)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (title, genre, min_players, max_players,
+         duration_min, duration_max, is_subscriber_only,
+         owner_user_id, owner_label),
+    )
+    await db.conn.commit()
+    return cur.lastrowid
+
+
+async def game_title_exists(title: str) -> bool:
+    """Проверяет, есть ли уже игра с таким названием (без учёта регистра)."""
+    async with db.conn.execute(
+        "SELECT 1 FROM games WHERE LOWER(title) = LOWER(?) LIMIT 1",
+        (title,),
+    ) as cur:
+        return await cur.fetchone() is not None

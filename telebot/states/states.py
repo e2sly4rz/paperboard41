@@ -2,7 +2,7 @@ from aiogram.fsm.state import State, StatesGroup
 
 
 class CreateNight(StatesGroup):
-    date = State()              # оставим для обратной совместимости, но не используем
+    date = State()
     location = State()
     searching_game = State()
     picking_game = State()
@@ -23,6 +23,14 @@ class AddSessionToNight(StatesGroup):
     time_end = State()
     slots = State()
 
+
 class PollTime(StatesGroup):
     picking_from = State()
     picking_to = State()
+
+
+class AddGame(StatesGroup):
+    title = State()
+    players = State()
+    duration = State()
+    subscriber_only = State()
