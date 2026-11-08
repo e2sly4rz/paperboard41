@@ -13,7 +13,7 @@ from keyboards.menus import (
     host_menu_empty,
     host_night_card_with_poll,
 )
-from utils import is_admin, is_host_or_admin, fmt_date
+from utils import is_admin, is_host_or_admin, fmt_date, safe_edit
 
 from ._helpers import can_manage_night
 
@@ -29,7 +29,8 @@ async def open_host_menu(call: CallbackQuery) -> None:
     nights = await list_all_upcoming_nights()
 
     if not nights:
-        await call.message.edit_text(
+        await safe_edit(
+            call.message,
             "🎩 <b>Меню организатора</b>\n\n"
             "Предстоящих игротек пока нет. Создайте первую!",
             parse_mode="HTML",
@@ -43,7 +44,8 @@ async def open_host_menu(call: CallbackQuery) -> None:
         if n["host_telegram_id"] == call.from_user.id
     }
 
-    await call.message.edit_text(
+    await safe_edit(
+        call.message,
         "🎩 <b>Меню организатора</b>\n\n"
         "Выберите игротеку или создайте новую:",
         parse_mode="HTML",
@@ -128,7 +130,8 @@ async def night_card(call: CallbackQuery) -> None:
     if len(text) > 4000:
         text = text[:3990] + "\n\n<i>…список обрезан</i>"
 
-    await call.message.edit_text(
+    await safe_edit(
+        call.message,
         text,
         parse_mode="HTML",
         reply_markup=host_night_card_with_poll(

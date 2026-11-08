@@ -493,6 +493,29 @@ async def get_users_for_registration_notification_by_levels(
     ) as cur:
         return [dict(r) for r in await cur.fetchall()]
 
+async def get_users_for_poll_notification(night_id: int) -> list[dict]:
+    """Все одобренные пользователи, кроме хоста игротеки.
+
+    Опрос о времени — предварительный сбор доступности до формирования
+    расписания. Уведомлять нужно всех в клубе, а не только записавшихся
+    (записей может не быть вообще).
+    """
+    night = await get_night(night_id)
+    if not night:
+        return []
+
+    host_id = night["host_telegram_id"] or 0
+
+    async with db.conn.execute(
+        """SELECT u.telegram_id, u.first_name, u.username, u.subscriber_level
+           FROM users u
+           WHERE u.is_approved = 1
+             AND u.telegram_id != ?
+           ORDER BY u.subscriber_level, u.first_name""",
+        (host_id,),
+    ) as cur:
+        return [dict(r) for r in await cur.fetchall()]
+
 
 async def get_nights_for_passenger_notification() -> list[dict]:
     """Игротеки, где:

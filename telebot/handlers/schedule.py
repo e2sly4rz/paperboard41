@@ -25,7 +25,7 @@ from keyboards.menus import (
     poll_time_grid_after,
 )
 from states.states import PollTime
-from utils import is_host_or_admin, fmt_date
+from utils import is_host_or_admin, fmt_date, safe_edit
 from notifications import notify_game_author_registration
 
 router = Router()
@@ -36,13 +36,15 @@ async def show_schedule(call: CallbackQuery) -> None:
     nights = await list_upcoming_nights()
     is_host_user = await is_host_or_admin(call.from_user.id)
     if not nights:
-        await call.message.edit_text(
+        await safe_edit(
+            call.message,
             "Пока нет запланированных игротек.",
             reply_markup=main_menu(is_host_user, call.from_user.id),
         )
         await call.answer()
         return
-    await call.message.edit_text(
+    await safe_edit(
+        call.message,
         "Ближайшие игротеки:",
         reply_markup=nights_list(nights),
     )
@@ -55,7 +57,8 @@ async def show_night(call: CallbackQuery) -> None:
     sessions = await get_night_sessions_with_conflicts(night_id, call.from_user.id)
 
     if not sessions:
-        await call.message.edit_text(
+        await safe_edit(
+            call.message,
             "В этой игротеке пока нет игр.",
             reply_markup=nights_list(await list_upcoming_nights()),
         )
@@ -90,7 +93,8 @@ async def show_night(call: CallbackQuery) -> None:
         builder.adjust(1)
         kb = builder.as_markup()
 
-    await call.message.edit_text(
+    await safe_edit(
+        call.message,
         header,
         parse_mode="HTML",
         reply_markup=kb,
@@ -156,7 +160,8 @@ async def show_session(call: CallbackQuery) -> None:
     if s["is_subscriber_only"]:
         text += "\n🔒 Только для подписчиков «Проводник»."
 
-    await call.message.edit_text(
+    await safe_edit(
+        call.message,
         text,
         parse_mode="HTML",
         reply_markup=session_card(session_id, s["night_id"], can_register),
@@ -186,7 +191,8 @@ async def do_register(call: CallbackQuery) -> None:
         f"Занято мест: {taken} из {s['max_slots']}\n"
         f"\n✅ Вы записаны!"
     )
-    await call.message.edit_text(
+    await safe_edit(
+        call.message,
         text,
         parse_mode="HTML",
         reply_markup=session_card(session_id, s["night_id"], False),
@@ -229,7 +235,8 @@ async def poll_answer_start(call: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(PollTime.picking_from)
     await state.update_data(poll_id=poll["id"], night_id=night_id)
 
-    await call.message.edit_text(
+    await safe_edit(
+        call.message,
         "⏰ <b>Когда вам удобно играть?</b>\n\n"
         "Выберите час, с которого вы готовы начать:",
         parse_mode="HTML",
@@ -244,7 +251,8 @@ async def poll_pick_from(call: CallbackQuery, state: FSMContext) -> None:
     await state.update_data(time_from=time_from)
     await state.set_state(PollTime.picking_to)
 
-    await call.message.edit_text(
+    await safe_edit(
+        call.message,
         f"⏰ Начало: <b>{time_from}</b>\n\n"
         f"Выберите час, до которого вы готовы играть:",
         parse_mode="HTML",
@@ -274,7 +282,8 @@ async def poll_pick_to(call: CallbackQuery, state: FSMContext) -> None:
     )
     await state.clear()
 
-    await call.message.edit_text(
+    await safe_edit(
+        call.message,
         f"✅ Ваше время: <b>{time_from}–{time_to}</b>\n\n"
         "Спасибо! Хост увидит ваш ответ.",
         parse_mode="HTML",

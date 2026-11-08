@@ -3,15 +3,18 @@ import logging
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramForbiddenError, TelegramRetryAfter
+from aiogram.types import InlineKeyboardMarkup
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from database.db import db
 from database.queries import get_night, get_game
 from utils import fmt_date
 
 
-async def _safe_send(bot: Bot, user_id: int, text: str) -> bool:
+async def _safe_send(bot: Bot, user_id: int, text: str,
+                     reply_markup: InlineKeyboardMarkup | None = None) -> bool:
     try:
-        await bot.send_message(user_id, text)
+        await bot.send_message(user_id, text, reply_markup=reply_markup)
         return True
     except TelegramForbiddenError:
         logging.warning(
@@ -31,10 +34,12 @@ async def _send_with_delay(
     user_ids: list[int],
     build_text,
     delay_seconds: float = 1.0,
+    reply_markup: InlineKeyboardMarkup | None = None,
 ) -> int:
     """Отправляет сообщения по одному с задержкой.
 
     build_text(user_id) -> str — функция, возвращающая текст для пользователя.
+    reply_markup — опциональная клавиатура (одинаковая для всех).
     Возвращает количество успешно отправленных.
     """
     sent = 0
@@ -42,7 +47,7 @@ async def _send_with_delay(
         text = build_text(user_id)
         if text is None:
             continue
-        ok = await _safe_send(bot, user_id, text)
+        ok = await _safe_send(bot, user_id, text, reply_markup)
         if ok:
             sent += 1
         await asyncio.sleep(delay_seconds)
@@ -128,23 +133,51 @@ async def notify_game_owner_deleted(
 
 async def notify_poll_created(
     bot: Bot,
-    participants: list[dict],
+    users: list[dict],
     initiator_id: int,
     *,
     night_date: str,
     night_location: str,
-) -> None:
-    for p in participants:
-        user_id = p["telegram_id"]
-        if user_id == initiator_id:
-            continue
-        text = (
+    night_id: int,
+) -> int:
+    """Уведомляет игроков, что хост собирает удобное время.
+
+    В сообщении — inline-кнопка «⏰ Указать удобное время»,
+    которая сразу запускает диалог, без перехода в расписание.
+    Отправка с задержкой 1 секунда между сообщениями.
+    Возвращает количество успешно отправленных.
+    """
+    user_ids = [
+        u["telegram_id"] for u in users
+        if u["telegram_id"] != initiator_id
+    ]
+
+    if not user_ids:
+        return 0
+
+    kb = InlineKeyboardBuilder()
+    kb.button(
+        text="⏰ Указать удобное время",
+        callback_data=f"poll_answer:{night_id}",
+    )
+    kb.adjust(1)
+    reply_markup = kb.as_markup()
+
+    def build_text(uid: int) -> str:
+        return (
             f"📊 <b>Хост собирает удобное время</b>\n\n"
             f"📅 {fmt_date(night_date)} • {night_location}\n\n"
-            f"Откройте «📅 Расписание» → эту игротеку "
-            f"и нажмите «⏰ Указать удобное время»."
+            f"Укажите, когда вы готовы играть — хост подберёт игры "
+            f"и время так, чтобы всем хватило места.\n\n"
+            f"Нажмите кнопку ниже или откройте «📅 Расписание» → "
+            f"эту игротеку."
         )
-        await _safe_send(bot, user_id, text)
+
+    return await _send_with_delay(
+        bot, user_ids, build_text,
+        delay_seconds=1.0,
+        reply_markup=reply_markup,
+    )
 
 
 async def notify_game_author_registration(

@@ -7,12 +7,12 @@ from database.queries import (
     get_active_poll_for_night,
     list_availability_responses,
     close_availability_poll,
-    get_night_participants,
+    get_users_for_poll_notification,
 )
 from keyboards.menus import (
     host_night_card_with_poll,
 )
-from utils import fmt_date
+from utils import fmt_date, safe_edit
 from notifications import notify_poll_created
 
 from ._helpers import can_manage_night
@@ -35,28 +35,28 @@ async def poll_create(call: CallbackQuery) -> None:
 
     await create_availability_poll(night_id, call.from_user.id)
 
-    participants = await get_night_participants(night_id)
-    sent = 0
-    if participants:
-        await notify_poll_created(
-            call.bot,
-            participants,
-            call.from_user.id,
-            night_date=night["date"],
-            night_location=night["location"],
-        )
-        sent = len([p for p in participants if p["telegram_id"] != call.from_user.id])
+    users = await get_users_for_poll_notification(night_id)
+    sent = await notify_poll_created(
+        call.bot,
+        users,
+        call.from_user.id,
+        night_date=night["date"],
+        night_location=night["location"],
+        night_id=night_id,
+    )
 
-    await call.message.edit_text(
+    await safe_edit(
+        call.message,
         f"✅ <b>Опрос создан</b>\n\n"
         f"Игротека {fmt_date(night['date'])} • {night['location']}\n"
-        f"Уведомлено участников: {sent}\n\n"
+        f"Уведомлено игроков: {sent}\n\n"
         f"Игроки увидят опрос в карточке игротеки в «📅 Расписание».",
         parse_mode="HTML",
         reply_markup=host_night_card_with_poll(
-            night_id, is_owner=True,
-            has_active_poll=True, has_any_poll=True,
-            registration_open=bool(night["registration_open"]),
+            night_id,
+            is_owner=True,
+            has_active_poll=True,
+            has_any_poll=True,
         ),
     )
     await call.answer()
@@ -77,7 +77,8 @@ async def poll_results(call: CallbackQuery) -> None:
 
     responses = await list_availability_responses(poll["id"])
     if not responses:
-        await call.message.edit_text(
+        await safe_edit(
+            call.message,
             f"📊 <b>Результаты опроса</b>\n\n"
             f"Игротека {fmt_date(night['date'])} • {night['location']}\n\n"
             f"Пока никто не ответил.",
@@ -85,7 +86,6 @@ async def poll_results(call: CallbackQuery) -> None:
             reply_markup=host_night_card_with_poll(
                 night_id, is_owner=True,
                 has_active_poll=True, has_any_poll=True,
-                registration_open=bool(night["registration_open"]),
             ),
         )
         await call.answer()
@@ -127,7 +127,8 @@ async def poll_results(call: CallbackQuery) -> None:
     if len(text) > 4000:
         text = text[:3990] + "\n\n<i>…список обрезан</i>"
 
-    await call.message.edit_text(
+    await safe_edit(
+        call.message,
         text,
         parse_mode="HTML",
         reply_markup=host_night_card_with_poll(
@@ -153,7 +154,8 @@ async def poll_close(call: CallbackQuery) -> None:
 
     await close_availability_poll(poll["id"])
 
-    await call.message.edit_text(
+    await safe_edit(
+        call.message,
         f"🔒 <b>Опрос закрыт</b>\n\n"
         f"Игротека {fmt_date(night['date'])} • {night['location']}\n\n"
         f"Результаты больше не принимаются.",
