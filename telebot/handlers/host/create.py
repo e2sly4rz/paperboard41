@@ -26,7 +26,7 @@ from keyboards.menus import (
     host_night_card_with_poll,
 )
 from states.states import CreateNight
-from utils import is_host_or_admin, fmt_date
+from utils import is_host_or_admin, fmt_date, safe_edit
 
 from ._helpers import add_minutes
 
@@ -45,7 +45,6 @@ async def _finalize_session(message, state: FSMContext,
     data = await state.get_data()
     game = await get_game(data["game_id"])
 
-    # Проверка: у хоста уже есть игра в это время в этот день?
     conflict = await find_host_conflict(
         user_id,
         data["date"],
@@ -124,7 +123,8 @@ async def start_create(call: CallbackQuery, state: FSMContext) -> None:
         datetime.now() + timedelta(days=365),
     )
 
-    await call.message.edit_text(
+    await safe_edit(
+        call.message,
         "Создание игротеки.\n\nВыберите дату:",
         reply_markup=await calendar.start_calendar(),
     )
@@ -151,7 +151,8 @@ async def enter_date(
     await state.update_data(date_display=date_obj.strftime("%d.%m.%Y"))
     await state.set_state(CreateNight.location)
 
-    await call.message.edit_text(
+    await safe_edit(
+        call.message,
         f"📅 Дата: {date_obj.strftime('%d.%m.%Y')}\n\n"
         f"Введите место проведения:"
     )
@@ -162,20 +163,34 @@ async def enter_date(
 async def enter_location(message: Message, state: FSMContext) -> None:
     await state.update_data(location=message.text.strip())
     await state.set_state(CreateNight.searching_game)
+
+    kb = InlineKeyboardBuilder()
+    kb.button(text="✅ Создать без игр", callback_data="host_finish")
+    kb.button(text="❌ Отмена", callback_data="host_cancel")
+    kb.adjust(1)
+
     await message.answer(
         "🔍 <b>Поиск игры</b>\n\n"
-        "Введите название или его часть (например, <code>catan</code>):",
+        "Введите название или его часть (например, <code>catan</code>):\n\n"
+        "<i>Или создайте игротеку без игр — добавите их позже.</i>",
         parse_mode="HTML",
-        reply_markup=search_prompt_keyboard("host_cancel"),
+        reply_markup=kb.as_markup(),
     )
 
 
 @router.callback_query(F.data == "host_create_search_again")
 async def create_search_again(call: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(CreateNight.searching_game)
-    await call.message.edit_text(
+
+    kb = InlineKeyboardBuilder()
+    kb.button(text="✅ Создать без игр", callback_data="host_finish")
+    kb.button(text="❌ Отмена", callback_data="host_cancel")
+    kb.adjust(1)
+
+    await safe_edit(
+        call.message,
         "🔍 Введите название или его часть:",
-        reply_markup=search_prompt_keyboard("host_cancel"),
+        reply_markup=kb.as_markup(),
     )
     await call.answer()
 
@@ -191,10 +206,14 @@ async def create_search(message: Message, state: FSMContext) -> None:
 
     if not games:
         await state.set_state(CreateNight.searching_game)
+        kb = InlineKeyboardBuilder()
+        kb.button(text="✅ Создать без игр", callback_data="host_finish")
+        kb.button(text="❌ Отмена", callback_data="host_cancel")
+        kb.adjust(1)
         await message.answer(
             f"🔍 По запросу «{query}» ничего не найдено.\n\n"
             f"Попробуйте другое название:",
-            reply_markup=search_prompt_keyboard("host_cancel"),
+            reply_markup=kb.as_markup(),
         )
         return
 
@@ -210,7 +229,8 @@ async def pick_game(call: CallbackQuery, state: FSMContext) -> None:
     game_id = int(call.data.split(":")[1])
     await state.update_data(game_id=game_id)
     await state.set_state(CreateNight.time_start)
-    await call.message.edit_text(
+    await safe_edit(
+        call.message,
         "⏰ <b>Время начала игры</b>\n\nВыберите час:",
         parse_mode="HTML",
         reply_markup=time_start_picker(),
@@ -223,7 +243,8 @@ async def pick_time_start(call: CallbackQuery, state: FSMContext) -> None:
     value = call.data.split(":", 1)[1]
 
     if value == "manual":
-        await call.message.edit_text(
+        await safe_edit(
+            call.message,
             "Введите время начала в формате ЧЧ:ММ:"
         )
         return
@@ -234,7 +255,8 @@ async def pick_time_start(call: CallbackQuery, state: FSMContext) -> None:
     game = await get_game(data["game_id"])
 
     await state.set_state(CreateNight.time_end)
-    await call.message.edit_text(
+    await safe_edit(
+        call.message,
         f"⏰ Начало: <b>{value}</b>\n\n"
         f"🎲 {game['title']}\n"
         f"Обычная длительность: "
@@ -251,7 +273,8 @@ async def pick_duration(call: CallbackQuery, state: FSMContext) -> None:
     value = call.data.split(":", 1)[1]
 
     if value == "manual":
-        await call.message.edit_text(
+        await safe_edit(
+            call.message,
             "Введите время окончания в формате ЧЧ:ММ:"
         )
         return
@@ -275,7 +298,8 @@ async def pick_duration(call: CallbackQuery, state: FSMContext) -> None:
     default_slots = game.get("max_players") or 4
 
     await state.set_state(CreateNight.slots)
-    await call.message.edit_text(
+    await safe_edit(
+        call.message,
         f"⏰ Время: <b>{time_start}–{time_end}</b>\n\n"
         f"🎲 {game['title']}\n"
         f"Игроков по правилам: "
@@ -292,7 +316,8 @@ async def pick_slots(call: CallbackQuery, state: FSMContext) -> None:
     value = call.data.split(":", 1)[1]
 
     if value == "manual":
-        await call.message.edit_text(
+        await safe_edit(
+            call.message,
             "Введите количество свободных мест (положительное число):"
         )
         return
@@ -363,9 +388,16 @@ async def enter_slots(message: Message, state: FSMContext) -> None:
 @router.callback_query(F.data == "host_add_more")
 async def host_add_more(call: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(CreateNight.searching_game)
-    await call.message.edit_text(
+
+    kb = InlineKeyboardBuilder()
+    kb.button(text="✅ Завершить создание", callback_data="host_finish")
+    kb.button(text="❌ Отмена", callback_data="host_cancel")
+    kb.adjust(1)
+
+    await safe_edit(
+        call.message,
         "🔍 Введите название игры или его часть:",
-        reply_markup=search_prompt_keyboard("host_finish"),
+        reply_markup=kb.as_markup(),
     )
     await call.answer()
 
@@ -374,38 +406,76 @@ async def host_add_more(call: CallbackQuery, state: FSMContext) -> None:
 async def host_finish(call: CallbackQuery, state: FSMContext) -> None:
     is_host_user = await is_host_or_admin(call.from_user.id)
     data = await state.get_data()
+    night_id = data.get("night_id")
+    date = data.get("date")
+    location = data.get("location")
+
     await state.clear()
 
-    night_id = data.get("night_id")
-    if not night_id:
-        await call.message.edit_text(
-            "Игротека не создана: не добавлено ни одной игры.",
-            reply_markup=main_menu(is_host_user, call.from_user.id),
+    # Случай 1: игры уже добавлялись — night_id есть
+    if night_id:
+        night = await get_night(night_id)
+        poll = await get_active_poll_for_night(night_id)
+
+        text = (
+            f"✅ <b>Игротека создана</b>\n\n"
+            f"📅 {fmt_date(night['date'])}\n"
+            f"📍 {night['location']}\n"
+            f"Игр: {night['sessions_count']} • Записей: {night['total_taken']}\n\n"
+            f"Добавьте игры и откройте запись, когда будете готовы."
+        )
+        await safe_edit(
+            call.message,
+            text,
+            parse_mode="HTML",
+            reply_markup=host_night_card_with_poll(
+                night_id,
+                is_owner=True,
+                has_active_poll=bool(poll),
+                has_any_poll=bool(poll),
+                registration_open=bool(night["registration_open"]),
+            ),
         )
         await call.answer()
         return
 
-    night = await get_night(night_id)
-    poll = await get_active_poll_for_night(night_id)
+    # Случай 2: игры не добавлялись, но дата и место введены — создаём пустую игротеку
+    if date and location:
+        night_id = await create_game_night(
+            date, location, call.from_user.id
+        )
+        night = await get_night(night_id)
 
-    text = (
-        f"✅ <b>Игротека создана</b>\n\n"
-        f"📅 {fmt_date(night['date'])}\n"
-        f"📍 {night['location']}\n"
-        f"Игр: {night['sessions_count']} • Записей: {night['total_taken']}\n\n"
-        f"Игроки увидят её в «📅 Расписание»."
-    )
+        text = (
+            f"✅ <b>Игротека создана</b>\n\n"
+            f"📅 {fmt_date(night['date'])}\n"
+            f"📍 {night['location']}\n"
+            f"Игр: 0 • Записей: 0\n\n"
+            f"<i>Пока в игротеке нет игр. Добавьте их через «➕ Добавить игру», "
+            f"когда будете готовы.</i>\n\n"
+            f"<i>Можно сначала создать опрос о времени, чтобы игроки "
+            f"указали удобные часы, и подобрать игры по результатам.</i>"
+        )
+        await safe_edit(
+            call.message,
+            text,
+            parse_mode="HTML",
+            reply_markup=host_night_card_with_poll(
+                night_id,
+                is_owner=True,
+                has_active_poll=False,
+                has_any_poll=False,
+                registration_open=False,
+            ),
+        )
+        await call.answer()
+        return
 
-    await call.message.edit_text(
-        text,
-        parse_mode="HTML",
-        reply_markup=host_night_card_with_poll(
-            night_id,
-            is_owner=True,
-            has_active_poll=bool(poll),
-            has_any_poll=bool(poll),
-            registration_open=bool(night["registration_open"]),
-        ),
+    # Случай 3: ничего не введено — ошибка
+    await safe_edit(
+        call.message,
+        "Игротека не создана: не указаны дата и место.",
+        reply_markup=main_menu(is_host_user, call.from_user.id),
     )
     await call.answer()
 
@@ -414,7 +484,8 @@ async def host_finish(call: CallbackQuery, state: FSMContext) -> None:
 async def host_cancel(call: CallbackQuery, state: FSMContext) -> None:
     is_host_user = await is_host_or_admin(call.from_user.id)
     await state.clear()
-    await call.message.edit_text(
+    await safe_edit(
+        call.message,
         "Создание игротеки отменено.",
         reply_markup=main_menu(is_host_user, call.from_user.id),
     )

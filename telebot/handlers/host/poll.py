@@ -61,7 +61,7 @@ async def poll_create(call: CallbackQuery) -> None:
         parse_mode="HTML",
         reply_markup=host_night_card_with_poll(
             night_id,
-            is_owner=False,           # не важно — кнопки опроса показываются всем хостам
+            is_owner=False,
             has_active_poll=True,
             has_any_poll=True,
         ),
@@ -87,6 +87,9 @@ async def poll_results(call: CallbackQuery) -> None:
         return
 
     responses = await list_availability_responses(poll["id"])
+    available = [r for r in responses if r["status"] == "available"]
+    unavailable = [r for r in responses if r["status"] == "unavailable"]
+
     if not responses:
         await safe_edit(
             call.message,
@@ -102,12 +105,11 @@ async def poll_results(call: CallbackQuery) -> None:
         await call.answer()
         return
 
-    # Гистограмма по часам 10–23
     hours = list(range(10, 24))
     counts = {}
     for h in hours:
         counts[h] = 0
-        for r in responses:
+        for r in available:
             from_h = int(r["time_from"].split(":")[0])
             to_h = int(r["time_to"].split(":")[0])
             if from_h <= h < to_h:
@@ -118,7 +120,8 @@ async def poll_results(call: CallbackQuery) -> None:
     lines = [
         "📊 <b>Результаты опроса</b>",
         f"Игротека {fmt_date(night['date'])} • {night['location']}",
-        f"Ответили: {len(responses)} чел.\n",
+        f"Ответили: {len(responses)} чел. "
+        f"(готовы играть: {len(available)}, не смогут: {len(unavailable)})\n",
     ]
 
     for h in hours:
@@ -129,10 +132,17 @@ async def poll_results(call: CallbackQuery) -> None:
         bar = "█" * bar_len + "░" * (8 - bar_len)
         lines.append(f"{h:02d}:00  {bar} {c}")
 
-    lines.append("\n<b>Ответы:</b>")
-    for r in responses:
-        name = r.get("first_name") or "Без имени"
-        lines.append(f"• {name}: {r['time_from']}–{r['time_to']}")
+    if available:
+        lines.append("\n<b>Готовы играть:</b>")
+        for r in available:
+            name = r.get("first_name") or "Без имени"
+            lines.append(f"• {name}: {r['time_from']}–{r['time_to']}")
+
+    if unavailable:
+        lines.append("\n<b>Не смогут прийти:</b>")
+        for r in unavailable:
+            name = r.get("first_name") or "Без имени"
+            lines.append(f"• {name}")
 
     text = "\n".join(lines)
     if len(text) > 4000:

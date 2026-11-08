@@ -121,8 +121,10 @@ CREATE TABLE IF NOT EXISTS availability_responses (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     poll_id    INTEGER NOT NULL,
     user_id    INTEGER NOT NULL,
-    time_from  TEXT NOT NULL,
-    time_to    TEXT NOT NULL,
+    status     TEXT NOT NULL DEFAULT 'available'
+        CHECK (status IN ('available', 'unavailable')),
+    time_from  TEXT,
+    time_to    TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (poll_id, user_id),
     FOREIGN KEY (poll_id) REFERENCES availability_polls(id) ON DELETE CASCADE,
@@ -150,6 +152,51 @@ async def _column_exists(table: str, column: str) -> bool:
     async with db.conn.execute(f"PRAGMA table_info({table})") as cur:
         columns = [row[1] for row in await cur.fetchall()]
     return column in columns
+
+
+async def _migrate_availability_responses_status() -> None:
+    """Добавляет колонку status и делает time_from/time_to nullable.
+
+    SQLite не умеет ALTER COLUMN, поэтому пересоздаём таблицу.
+    """
+    async with db.conn.execute("PRAGMA table_info(availability_responses)") as cur:
+        columns = [row[1] for row in await cur.fetchall()]
+
+    if "status" in columns:
+        return
+
+    await db.conn.execute("""
+        CREATE TABLE availability_responses_new (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            poll_id    INTEGER NOT NULL,
+            user_id    INTEGER NOT NULL,
+            status     TEXT NOT NULL DEFAULT 'available'
+                CHECK (status IN ('available', 'unavailable')),
+            time_from  TEXT,
+            time_to    TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (poll_id, user_id),
+            FOREIGN KEY (poll_id) REFERENCES availability_polls(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(telegram_id)
+        )
+    """)
+
+    await db.conn.execute("""
+        INSERT INTO availability_responses_new
+            (id, poll_id, user_id, status, time_from, time_to, created_at)
+        SELECT id, poll_id, user_id, 'available', time_from, time_to, created_at
+        FROM availability_responses
+    """)
+
+    await db.conn.execute("DROP TABLE availability_responses")
+    await db.conn.execute(
+        "ALTER TABLE availability_responses_new RENAME TO availability_responses"
+    )
+    await db.conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_avail_poll "
+        "ON availability_responses(poll_id)"
+    )
+    await db.conn.commit()
 
 
 async def _run_migrations() -> None:
@@ -217,6 +264,8 @@ async def _run_migrations() -> None:
     )
 
     await db.conn.commit()
+
+    await _migrate_availability_responses_status()
 
 
 async def init_db() -> None:

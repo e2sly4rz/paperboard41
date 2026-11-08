@@ -36,12 +36,6 @@ async def _send_with_delay(
     delay_seconds: float = 1.0,
     reply_markup: InlineKeyboardMarkup | None = None,
 ) -> int:
-    """Отправляет сообщения по одному с задержкой.
-
-    build_text(user_id) -> str — функция, возвращающая текст для пользователя.
-    reply_markup — опциональная клавиатура (одинаковая для всех).
-    Возвращает количество успешно отправленных.
-    """
     sent = 0
     for user_id in user_ids:
         text = build_text(user_id)
@@ -142,9 +136,8 @@ async def notify_poll_created(
 ) -> int:
     """Уведомляет игроков, что хост собирает удобное время.
 
-    В сообщении — inline-кнопка «⏰ Указать удобное время»,
-    которая сразу запускает диалог, без перехода в расписание.
-    Отправка с задержкой 1 секунда между сообщениями.
+    В сообщении — две кнопки: указать удобное время или отметить,
+    что не сможете прийти. Отправка с задержкой 1 сек.
     Возвращает количество успешно отправленных.
     """
     user_ids = [
@@ -160,6 +153,10 @@ async def notify_poll_created(
         text="⏰ Указать удобное время",
         callback_data=f"poll_answer:{night_id}",
     )
+    kb.button(
+        text="❌ Не смогу прийти",
+        callback_data=f"poll_unavailable_notify:{night_id}",
+    )
     kb.adjust(1)
     reply_markup = kb.as_markup()
 
@@ -169,8 +166,8 @@ async def notify_poll_created(
             f"📅 {fmt_date(night_date)} • {night_location}\n\n"
             f"Укажите, когда вы готовы играть — хост подберёт игры "
             f"и время так, чтобы всем хватило места.\n\n"
-            f"Нажмите кнопку ниже или откройте «📅 Расписание» → "
-            f"эту игротеку."
+            f"Если не планируете приходить — отметьте это, "
+            f"чтобы хост учитывал только реальные ответы."
         )
 
     return await _send_with_delay(
@@ -265,20 +262,38 @@ async def notify_registration_opened(
     night_location: str,
     night_id: int,
     target_level: str,
+    early: bool = False,
 ) -> int:
-    """Уведомляет игроков указанного уровня об открытии записи.
-
-    Отправка с задержкой 1 секунда между сообщениями.
-    """
     if target_level == "provodnik":
         header = "🔓 <b>Запись открыта</b>"
         body = "Откройте «📅 Расписание» → эту игротеку и запишитесь на игры."
-    else:
-        header = "🔓 <b>Запись открыта для пассажиров</b>"
-        body = (
-            "До начала игры осталось меньше 8 часов — запись открыта для всех.\n"
-            "Откройте «📅 Расписание» → эту игротеку и запишитесь на игры."
+
+        kb = InlineKeyboardBuilder()
+        kb.button(
+            text="⏰ Указать удобное время",
+            callback_data=f"poll_answer:{night_id}",
         )
+        kb.button(
+            text="❌ Не смогу прийти",
+            callback_data=f"poll_unavailable_notify:{night_id}",
+        )
+        kb.adjust(1)
+        reply_markup = kb.as_markup()
+    else:
+        if early:
+            header = "🔓 <b>Запись открыта для всех</b>"
+            body = (
+                "Проводники уже записались на игры — запись открыта "
+                "для пассажиров раньше срока.\n\n"
+                "Откройте «📅 Расписание» → эту игротеку и запишитесь."
+            )
+        else:
+            header = "🔓 <b>Запись открыта для пассажиров</b>"
+            body = (
+                "До начала игры осталось меньше 8 часов — запись открыта для всех.\n"
+                "Откройте «📅 Расписание» → эту игротеку и запишитесь."
+            )
+        reply_markup = None
 
     user_ids = [
         u["telegram_id"] for u in users
@@ -292,4 +307,8 @@ async def notify_registration_opened(
             f"{body}"
         )
 
-    return await _send_with_delay(bot, user_ids, build_text, delay_seconds=1.0)
+    return await _send_with_delay(
+        bot, user_ids, build_text,
+        delay_seconds=1.0,
+        reply_markup=reply_markup,
+    )

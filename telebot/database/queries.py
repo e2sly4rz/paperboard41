@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 from config import ADMIN_ID
 from database.db import db
@@ -412,14 +412,6 @@ async def open_night_registration(night_id: int, opened_by: int) -> bool:
 async def can_register_for_night(
     night_id: int, user_id: int
 ) -> tuple[bool, str]:
-    """Можно ли пользователю записаться на игры этой игротеки.
-
-    Правила:
-    - админ и хосты — всегда;
-    - Проводники — после открытия записи;
-    - пассажиры — после открытия и за 8 часов до самой ранней игры;
-    - после начала игры — нельзя (кроме админа и хостов).
-    """
     night = await get_night(night_id)
     if not night:
         return False, "Игротека не найдена."
@@ -454,22 +446,23 @@ async def can_register_for_night(
     if level == "provodnik":
         return True, ""
 
-    if delta > timedelta(hours=8):
-        return (
-            False,
-            f"Запись для пассажиров откроется за 8 часов до начала игры "
-            f"({session_dt.strftime('%d.%m.%Y %H:%M')})."
-        )
+    if delta <= timedelta(hours=8):
+        return True, ""
 
-    return True, ""
+    if await can_passengers_register_early(night_id):
+        return True, ""
+
+    return (
+        False,
+        f"Запись для пассажиров откроется за 8 часов до начала игры "
+        f"({session_dt.strftime('%d.%m.%Y %H:%M')}) "
+        f"или когда Проводники закончат записываться."
+    )
 
 
 async def get_users_for_registration_notification_by_levels(
     night_id: int, levels: list[str]
 ) -> list[dict]:
-    """Одобренные пользователи указанных уровней, кроме хоста игротеки
-    и кроме уже записанных на эту игротеку.
-    """
     night = await get_night(night_id)
     if not night:
         return []
@@ -493,36 +486,105 @@ async def get_users_for_registration_notification_by_levels(
     ) as cur:
         return [dict(r) for r in await cur.fetchall()]
 
-async def get_users_for_poll_notification(night_id: int) -> list[dict]:
-    """Все одобренные пользователи, кроме хоста игротеки.
 
-    Опрос о времени — предварительный сбор доступности до формирования
-    расписания. Уведомлять нужно всех в клубе, а не только записавшихся
-    (записей может не быть вообще).
-    """
+async def get_last_provodnik_registration_time(night_id: int) -> datetime | None:
+    async with db.conn.execute(
+        """SELECT MAX(r.registered_at) AS last_at
+           FROM registrations r
+           JOIN game_sessions gs ON gs.id = r.session_id
+           JOIN users u ON u.telegram_id = r.user_telegram_id
+           WHERE gs.game_night_id = ?
+             AND u.subscriber_level IN ('provodnik', 'host')""",
+        (night_id,),
+    ) as cur:
+        row = await cur.fetchone()
+
+    if not row or not row["last_at"]:
+        return None
+
+    try:
+        dt = datetime.fromisoformat(row["last_at"])
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except (ValueError, TypeError):
+        return None
+
+
+async def can_passengers_register_early(night_id: int) -> bool:
     night = await get_night(night_id)
-    if not night:
-        return []
+    if not night or not night["registration_open"]:
+        return False
 
-    host_id = night["host_telegram_id"] or 0
+    sessions = await get_night_sessions(night_id)
+    if not sessions:
+        return False
+
+    if all(s["free_slots"] <= 0 for s in sessions):
+        return False
 
     async with db.conn.execute(
-        """SELECT u.telegram_id, u.first_name, u.username, u.subscriber_level
+        """SELECT u.telegram_id
            FROM users u
-           WHERE u.is_approved = 1
-             AND u.telegram_id != ?
-           ORDER BY u.subscriber_level, u.first_name""",
-        (host_id,),
+           WHERE u.subscriber_level = 'provodnik'
+             AND u.is_approved = 1
+             AND u.telegram_id NOT IN (
+                 SELECT r.user_telegram_id
+                 FROM registrations r
+                 JOIN game_sessions gs ON gs.id = r.session_id
+                 WHERE gs.game_night_id = ?
+             )""",
+        (night_id,),
     ) as cur:
-        return [dict(r) for r in await cur.fetchall()]
+        available_provodniks = [row["telegram_id"] for row in await cur.fetchall()]
+
+    poll = await get_active_poll_for_night(night_id)
+    responses_by_user: dict[int, dict] = {}
+    if poll:
+        async with db.conn.execute(
+            """SELECT user_id, status, time_from, time_to
+               FROM availability_responses WHERE poll_id = ?""",
+            (poll["id"],),
+        ) as cur:
+            for row in await cur.fetchall():
+                responses_by_user[row["user_id"]] = dict(row)
+
+    available_provodniks = [
+        uid for uid in available_provodniks
+        if responses_by_user.get(uid, {}).get("status") != "unavailable"
+    ]
+
+    if available_provodniks:
+        for s in sessions:
+            if s["free_slots"] <= 0:
+                continue
+
+            game_start_h = int(s["time_start"].split(":")[0])
+            game_end_h = int((s["time_end"] or s["time_start"]).split(":")[0])
+
+            for uid in available_provodniks:
+                response = responses_by_user.get(uid)
+                if response and response.get("status") == "available":
+                    resp_from = int(response["time_from"].split(":")[0])
+                    resp_to = int(response["time_to"].split(":")[0])
+                    if not (resp_from <= game_start_h and game_end_h <= resp_to):
+                        continue
+
+                conflict = await find_session_conflict_for_user(s["id"], uid)
+                if conflict is None:
+                    return False
+
+    last_at = await get_last_provodnik_registration_time(night_id)
+    if last_at is None:
+        return False
+
+    if club_now() - last_at < timedelta(minutes=15):
+        return False
+
+    return True
 
 
 async def get_nights_for_passenger_notification() -> list[dict]:
-    """Игротеки, где:
-    - запись открыта,
-    - пассажирам уже можно (≤ 8 часов до самой ранней игры),
-    - пассажиры ещё не уведомлены.
-    """
     async with db.conn.execute(
         """SELECT gn.id, gn.date, gn.location
            FROM game_nights gn
@@ -546,8 +608,13 @@ async def get_nights_for_passenger_notification() -> list[dict]:
             continue
 
         delta = session_dt - now
+
         if timedelta(0) <= delta <= timedelta(hours=8):
-            result.append(n)
+            result.append({**n, "early": False})
+            continue
+
+        if await can_passengers_register_early(n["id"]):
+            result.append({**n, "early": True})
 
     return result
 
@@ -900,9 +967,10 @@ async def upsert_availability_response(poll_id: int, user_id: int,
                                        time_from: str, time_to: str) -> None:
     await db.conn.execute(
         """INSERT INTO availability_responses
-           (poll_id, user_id, time_from, time_to)
-           VALUES (?, ?, ?, ?)
+           (poll_id, user_id, status, time_from, time_to)
+           VALUES (?, ?, 'available', ?, ?)
            ON CONFLICT(poll_id, user_id) DO UPDATE SET
+               status    = 'available',
                time_from = excluded.time_from,
                time_to   = excluded.time_to,
                created_at = CURRENT_TIMESTAMP""",
@@ -911,14 +979,29 @@ async def upsert_availability_response(poll_id: int, user_id: int,
     await db.conn.commit()
 
 
+async def mark_availability_unavailable(poll_id: int, user_id: int) -> None:
+    await db.conn.execute(
+        """INSERT INTO availability_responses
+           (poll_id, user_id, status, time_from, time_to)
+           VALUES (?, ?, 'unavailable', NULL, NULL)
+           ON CONFLICT(poll_id, user_id) DO UPDATE SET
+               status    = 'unavailable',
+               time_from = NULL,
+               time_to   = NULL,
+               created_at = CURRENT_TIMESTAMP""",
+        (poll_id, user_id),
+    )
+    await db.conn.commit()
+
+
 async def list_availability_responses(poll_id: int) -> list[dict]:
     async with db.conn.execute(
-        """SELECT r.user_id, r.time_from, r.time_to, r.created_at,
+        """SELECT r.user_id, r.status, r.time_from, r.time_to, r.created_at,
                   u.username, u.first_name, u.last_name
            FROM availability_responses r
            JOIN users u ON u.telegram_id = r.user_id
            WHERE r.poll_id = ?
-           ORDER BY r.time_from""",
+           ORDER BY r.status, r.time_from""",
         (poll_id,),
     ) as cur:
         return [dict(r) for r in await cur.fetchall()]
@@ -940,6 +1023,24 @@ async def get_night_participants(night_id: int) -> list[dict]:
            JOIN users u ON u.telegram_id = r.user_telegram_id
            WHERE gs.game_night_id = ?""",
         (night_id,),
+    ) as cur:
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def get_users_for_poll_notification(night_id: int) -> list[dict]:
+    night = await get_night(night_id)
+    if not night:
+        return []
+
+    host_id = night["host_telegram_id"] or 0
+
+    async with db.conn.execute(
+        """SELECT u.telegram_id, u.first_name, u.username, u.subscriber_level
+           FROM users u
+           WHERE u.is_approved = 1
+             AND u.telegram_id != ?
+           ORDER BY u.subscriber_level, u.first_name""",
+        (host_id,),
     ) as cur:
         return [dict(r) for r in await cur.fetchall()]
 

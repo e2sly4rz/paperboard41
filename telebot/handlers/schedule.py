@@ -13,6 +13,7 @@ from database.queries import (
     get_user,
     get_active_poll_for_night,
     upsert_availability_response,
+    mark_availability_unavailable,
     find_session_conflict_for_user,
     can_register_for_night,
 )
@@ -241,6 +242,50 @@ async def poll_answer_start(call: CallbackQuery, state: FSMContext) -> None:
         "Выберите час, с которого вы готовы начать:",
         parse_mode="HTML",
         reply_markup=poll_time_grid("pollfrom"),
+    )
+    await call.answer()
+
+
+@router.callback_query(PollTime.picking_from, F.data == "poll_unavailable")
+async def poll_unavailable(call: CallbackQuery, state: FSMContext) -> None:
+    data = await state.get_data()
+    poll_id = data.get("poll_id")
+    if not poll_id:
+        await call.answer("Сессия устарела. Начните заново.", show_alert=True)
+        await state.clear()
+        return
+
+    await mark_availability_unavailable(poll_id, call.from_user.id)
+    await state.clear()
+
+    await safe_edit(
+        call.message,
+        "✅ <b>Отмечено: вы не сможете прийти.</b>\n\n"
+        "Если передумаете — откройте опрос в карточке игротеки "
+        "и укажите удобное время.",
+        parse_mode="HTML",
+        reply_markup=main_menu(False, call.from_user.id),
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("poll_unavailable_notify:"))
+async def poll_unavailable_from_notify(call: CallbackQuery) -> None:
+    night_id = int(call.data.split(":")[1])
+    poll = await get_active_poll_for_night(night_id)
+    if not poll:
+        await call.answer("Опрос уже закрыт", show_alert=True)
+        return
+
+    await mark_availability_unavailable(poll["id"], call.from_user.id)
+
+    await safe_edit(
+        call.message,
+        "✅ <b>Отмечено: вы не сможете прийти.</b>\n\n"
+        "Если передумаете — откройте опрос в карточке игротеки "
+        "и укажите удобное время.",
+        parse_mode="HTML",
+        reply_markup=main_menu(False, call.from_user.id),
     )
     await call.answer()
 
