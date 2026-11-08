@@ -68,7 +68,6 @@ async def night_card(call: CallbackQuery) -> None:
     is_own = night["host_telegram_id"] == call.from_user.id
     active_poll = await get_active_poll_for_night(night_id) if can_manage else None
 
-    # Собираем список игр с участниками
     rows = await get_all_night_registrations(night_id)
     sessions: dict[int, dict] = {}
     for r in rows:
@@ -89,11 +88,14 @@ async def night_card(call: CallbackQuery) -> None:
                 "username": r["username"],
             })
 
+    reg_status = "🔓 открыта" if night["registration_open"] else "🔒 закрыта"
+
     lines = [
         "🎲 <b>Игротека</b>",
         f"📅 {fmt_date(night['date'])}",
         f"📍 {night['location']}",
         f"Игр: {night['sessions_count']} • Записей: {night['total_taken']}",
+        f"Запись: {reg_status}",
     ]
     if is_admin(call.from_user.id) and not is_own:
         lines.append("<i>(админ: игротека другого хоста)</i>")
@@ -134,6 +136,7 @@ async def night_card(call: CallbackQuery) -> None:
             is_owner=can_manage,
             has_active_poll=bool(active_poll) if can_manage else False,
             has_any_poll=bool(active_poll) if can_manage else False,
+            registration_open=bool(night["registration_open"]),
         ),
     )
     await call.answer()
@@ -141,7 +144,6 @@ async def night_card(call: CallbackQuery) -> None:
 
 @router.callback_query(F.data.startswith("hn_part:"))
 async def session_participants(call: CallbackQuery) -> None:
-    """Оставлен для совместимости: если где-то ещё есть кнопка hn_part."""
     if not await is_host_or_admin(call.from_user.id):
         await call.answer("Только для организаторов", show_alert=True)
         return
@@ -166,5 +168,4 @@ async def session_participants(call: CallbackQuery) -> None:
         await call.answer("Нет доступа", show_alert=True)
         return
 
-    # Просто возвращаем в карточку — там уже есть весь список
     await call.answer("Список участников — в карточке игротеки")

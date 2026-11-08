@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from aiogram import Bot
@@ -25,6 +26,29 @@ async def _safe_send(bot: Bot, user_id: int, text: str) -> bool:
         return False
 
 
+async def _send_with_delay(
+    bot: Bot,
+    user_ids: list[int],
+    build_text,
+    delay_seconds: float = 1.0,
+) -> int:
+    """Отправляет сообщения по одному с задержкой.
+
+    build_text(user_id) -> str — функция, возвращающая текст для пользователя.
+    Возвращает количество успешно отправленных.
+    """
+    sent = 0
+    for user_id in user_ids:
+        text = build_text(user_id)
+        if text is None:
+            continue
+        ok = await _safe_send(bot, user_id, text)
+        if ok:
+            sent += 1
+        await asyncio.sleep(delay_seconds)
+    return sent
+
+
 async def notify_session_deleted(
     bot: Bot,
     session_id: int,
@@ -35,10 +59,6 @@ async def notify_session_deleted(
     time_start: str,
     time_end: str | None,
 ) -> None:
-    """Уведомляет владельца игротеки об удалении игры.
-
-    Не уведомляет инициатора.
-    """
     night = await get_night(night_id)
     if not night:
         return
@@ -65,11 +85,6 @@ async def notify_registrants_deleted(
     time_start: str,
     time_end: str | None,
 ) -> None:
-    """Уведомляет записавшихся об удалении игры.
-
-    registrants — список строк из get_session_registrations_full,
-    прочитанный ДО удаления сессии.
-    """
     for r in registrants:
         user_id = r["telegram_id"]
         if user_id == initiator_id:
@@ -95,7 +110,6 @@ async def notify_game_owner_deleted(
     time_start: str,
     time_end: str | None,
 ) -> None:
-    """Уведомляет владельца игры (games.owner_user_id), если не инициатор."""
     game = await get_game(game_id)
     if not game:
         return
@@ -120,7 +134,6 @@ async def notify_poll_created(
     night_date: str,
     night_location: str,
 ) -> None:
-    """Уведомляет записавшихся игроков, что хост создал опрос о времени."""
     for p in participants:
         user_id = p["telegram_id"]
         if user_id == initiator_id:
@@ -148,10 +161,6 @@ async def notify_game_author_registration(
     max_slots: int,
     player_name: str,
 ) -> None:
-    """Уведомляет автора сессии (created_by_user_id) о новой записи.
-
-    Если автор совпадает с инициатором — уведомление не отправляется.
-    """
     async with db.conn.execute(
         "SELECT created_by_user_id FROM game_sessions WHERE id = ?",
         (session_id,),
@@ -190,11 +199,6 @@ async def notify_game_author_cancellation(
     max_slots: int,
     player_name: str,
 ) -> None:
-    """Уведомляет автора сессии об отмене записи игроком.
-
-    Если автор совпадает с инициатором — уведомление не отправляется.
-    slots_taken — уже после декремента.
-    """
     async with db.conn.execute(
         "SELECT created_by_user_id FROM game_sessions WHERE id = ?",
         (session_id,),
@@ -217,3 +221,42 @@ async def notify_game_author_cancellation(
         f"Занято: {slots_taken} из {max_slots}"
     )
     await _safe_send(bot, author_id, text)
+
+
+async def notify_registration_opened(
+    bot: Bot,
+    users: list[dict],
+    initiator_id: int,
+    *,
+    night_date: str,
+    night_location: str,
+    night_id: int,
+    target_level: str,
+) -> int:
+    """Уведомляет игроков указанного уровня об открытии записи.
+
+    Отправка с задержкой 1 секунда между сообщениями.
+    """
+    if target_level == "provodnik":
+        header = "🔓 <b>Запись открыта</b>"
+        body = "Откройте «📅 Расписание» → эту игротеку и запишитесь на игры."
+    else:
+        header = "🔓 <b>Запись открыта для пассажиров</b>"
+        body = (
+            "До начала игры осталось меньше 8 часов — запись открыта для всех.\n"
+            "Откройте «📅 Расписание» → эту игротеку и запишитесь на игры."
+        )
+
+    user_ids = [
+        u["telegram_id"] for u in users
+        if u["telegram_id"] != initiator_id
+    ]
+
+    def build_text(uid: int) -> str:
+        return (
+            f"{header}\n\n"
+            f"📅 {fmt_date(night_date)} • {night_location}\n\n"
+            f"{body}"
+        )
+
+    return await _send_with_delay(bot, user_ids, build_text, delay_seconds=1.0)

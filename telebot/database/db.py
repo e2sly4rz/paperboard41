@@ -57,11 +57,15 @@ CREATE TABLE IF NOT EXISTS games (
 );
 
 CREATE TABLE IF NOT EXISTS game_nights (
-    id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    date             DATE NOT NULL,
-    location         TEXT NOT NULL,
-    host_telegram_id INTEGER,
-    created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+    date                   DATE NOT NULL,
+    location               TEXT NOT NULL,
+    host_telegram_id       INTEGER,
+    registration_open      INTEGER NOT NULL DEFAULT 0,
+    registration_opened_at TIMESTAMP,
+    registration_opened_by INTEGER,
+    passenger_notified_at  TIMESTAMP,
+    created_at             TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (host_telegram_id) REFERENCES users(telegram_id)
 );
 
@@ -184,6 +188,27 @@ async def _run_migrations() -> None:
         await db.conn.execute(
             "ALTER TABLE game_sessions ADD COLUMN registration_approved "
             "INTEGER NOT NULL DEFAULT 1"
+        )
+
+    if not await _column_exists("game_nights", "registration_open"):
+        await db.conn.execute(
+            "ALTER TABLE game_nights ADD COLUMN registration_open "
+            "INTEGER NOT NULL DEFAULT 0"
+        )
+
+    if not await _column_exists("game_nights", "registration_opened_at"):
+        await db.conn.execute(
+            "ALTER TABLE game_nights ADD COLUMN registration_opened_at TIMESTAMP"
+        )
+
+    if not await _column_exists("game_nights", "registration_opened_by"):
+        await db.conn.execute(
+            "ALTER TABLE game_nights ADD COLUMN registration_opened_by INTEGER"
+        )
+
+    if not await _column_exists("game_nights", "passenger_notified_at"):
+        await db.conn.execute(
+            "ALTER TABLE game_nights ADD COLUMN passenger_notified_at TIMESTAMP"
         )
 
     await db.conn.execute(

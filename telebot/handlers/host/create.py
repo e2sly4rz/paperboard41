@@ -404,6 +404,7 @@ async def host_finish(call: CallbackQuery, state: FSMContext) -> None:
             is_owner=True,
             has_active_poll=bool(poll),
             has_any_poll=bool(poll),
+            registration_open=bool(night["registration_open"]),
         ),
     )
     await call.answer()

@@ -1,4 +1,8 @@
+from datetime import timedelta
+
+from config import ADMIN_ID
 from database.db import db
+from time_utils import club_now, session_datetime
 
 
 # ---------- Пользователи ----------
@@ -129,6 +133,39 @@ async def search_games(query: str, limit: int = 10) -> list[dict]:
     return [g for _, _, g in scored[:limit]]
 
 
+async def create_game(
+    title: str,
+    genre: str | None,
+    min_players: int,
+    max_players: int,
+    duration_min: int,
+    duration_max: int,
+    is_subscriber_only: int,
+    owner_user_id: int | None,
+    owner_label: str,
+) -> int:
+    cur = await db.conn.execute(
+        """INSERT INTO games
+           (title, genre, min_players, max_players,
+            duration_min, duration_max, is_subscriber_only,
+            owner_user_id, owner)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (title, genre, min_players, max_players,
+         duration_min, duration_max, is_subscriber_only,
+         owner_user_id, owner_label),
+    )
+    await db.conn.commit()
+    return cur.lastrowid
+
+
+async def game_title_exists(title: str) -> bool:
+    async with db.conn.execute(
+        "SELECT 1 FROM games WHERE LOWER(title) = LOWER(?) LIMIT 1",
+        (title,),
+    ) as cur:
+        return await cur.fetchone() is not None
+
+
 # ---------- Игротеки и сессии ----------
 
 async def create_game_night(date: str, location: str,
@@ -167,18 +204,10 @@ async def add_session(
     return cur.lastrowid
 
 
-async def set_session_registration_approved(session_id: int,
-                                            approved: int) -> None:
-    await db.conn.execute(
-        "UPDATE game_sessions SET registration_approved = ? WHERE id = ?",
-        (approved, session_id),
-    )
-    await db.conn.commit()
-
-
 async def list_upcoming_nights() -> list[dict]:
     async with db.conn.execute(
         """SELECT gn.id, gn.date, gn.location,
+                  gn.registration_open,
                   COUNT(gs.id) AS sessions_count
            FROM game_nights gn
            LEFT JOIN game_sessions gs ON gs.game_night_id = gn.id
@@ -193,6 +222,7 @@ async def list_all_upcoming_nights() -> list[dict]:
     async with db.conn.execute(
         """SELECT gn.id, gn.date, gn.location,
                   gn.host_telegram_id,
+                  gn.registration_open,
                   COUNT(gs.id) AS sessions_count,
                   COALESCE(SUM(gs.slots_taken), 0) AS total_taken
            FROM game_nights gn
@@ -226,7 +256,6 @@ async def get_night_sessions(night_id: int) -> list[dict]:
 async def get_night_sessions_with_conflicts(
     night_id: int, user_id: int
 ) -> list[dict]:
-    """Сессии игротеки + флаг conflict (пересекается с записью пользователя)."""
     async with db.conn.execute(
         """SELECT gs.id, gs.time_start, gs.time_end,
                   gs.max_slots, gs.slots_taken,
@@ -264,7 +293,7 @@ async def get_session(session_id: int) -> dict | None:
                   g.min_players, g.max_players,
                   g.is_subscriber_only,
                   gn.id AS night_id,
-                  gn.date, gn.location,
+                  gn.date, gn.location, gn.registration_open,
                   (gs.max_slots - gs.slots_taken) AS free_slots
            FROM game_sessions gs
            JOIN games g       ON g.id  = gs.game_id
@@ -286,7 +315,6 @@ async def get_session_author(session_id: int) -> int | None:
 
 
 async def get_session_registrations_full(session_id: int) -> list[dict]:
-    """Список записавшихся на сессию с telegram_id — для уведомлений."""
     async with db.conn.execute(
         """SELECT u.telegram_id, u.first_name, u.last_name, u.username
            FROM registrations r
@@ -304,7 +332,6 @@ async def find_host_conflict(
     time_end: str | None,
     exclude_session_id: int | None = None,
 ) -> dict | None:
-    """Ищет игру, которую ведёт этот хост в тот же день и пересекается по времени."""
     end = time_end or time_start
 
     query = """
@@ -335,7 +362,6 @@ async def find_host_conflict(
 async def find_session_conflict_for_user(
     session_id: int, user_id: int
 ) -> dict | None:
-    """Ищет запись пользователя, которая пересекается с указанной сессией."""
     async with db.conn.execute(
         """SELECT gs2.time_start, gs2.time_end,
                   g2.title AS game_title,
@@ -357,6 +383,161 @@ async def find_session_conflict_for_user(
         return dict(row) if row else None
 
 
+# ---------- Окна открытия записи ----------
+
+async def open_night_registration(night_id: int, opened_by: int) -> bool:
+    async with db.conn.execute(
+        "SELECT registration_open FROM game_nights WHERE id = ?",
+        (night_id,),
+    ) as cur:
+        row = await cur.fetchone()
+
+    if not row:
+        return False
+    if row["registration_open"]:
+        return False
+
+    await db.conn.execute(
+        """UPDATE game_nights
+           SET registration_open = 1,
+               registration_opened_at = CURRENT_TIMESTAMP,
+               registration_opened_by = ?
+           WHERE id = ?""",
+        (opened_by, night_id),
+    )
+    await db.conn.commit()
+    return True
+
+
+async def can_register_for_night(
+    night_id: int, user_id: int
+) -> tuple[bool, str]:
+    """Можно ли пользователю записаться на игры этой игротеки.
+
+    Правила:
+    - админ и хосты — всегда;
+    - Проводники — после открытия записи;
+    - пассажиры — после открытия и за 8 часов до самой ранней игры;
+    - после начала игры — нельзя (кроме админа и хостов).
+    """
+    night = await get_night(night_id)
+    if not night:
+        return False, "Игротека не найдена."
+
+    user = await get_user(user_id)
+    if not user:
+        return False, "Пользователь не найден."
+
+    level = user["subscriber_level"]
+
+    if user_id == ADMIN_ID or level == "host":
+        return True, ""
+
+    if not night["registration_open"]:
+        return False, "Запись на эту игротеку ещё не открыта."
+
+    sessions = await get_night_sessions(night_id)
+    if not sessions:
+        return False, "В игротеке пока нет игр."
+
+    earliest_time = min(s["time_start"] for s in sessions)
+    session_dt = session_datetime(night["date"], earliest_time)
+    if session_dt is None:
+        return False, "Не удалось определить время игры."
+
+    now = club_now()
+    delta = session_dt - now
+
+    if delta < timedelta(0):
+        return False, "Игра уже началась."
+
+    if level == "provodnik":
+        return True, ""
+
+    if delta > timedelta(hours=8):
+        return (
+            False,
+            f"Запись для пассажиров откроется за 8 часов до начала игры "
+            f"({session_dt.strftime('%d.%m.%Y %H:%M')})."
+        )
+
+    return True, ""
+
+
+async def get_users_for_registration_notification_by_levels(
+    night_id: int, levels: list[str]
+) -> list[dict]:
+    """Одобренные пользователи указанных уровней, кроме хоста игротеки
+    и кроме уже записанных на эту игротеку.
+    """
+    night = await get_night(night_id)
+    if not night:
+        return []
+
+    host_id = night["host_telegram_id"] or 0
+    placeholders = ",".join("?" * len(levels))
+
+    async with db.conn.execute(
+        f"""SELECT u.telegram_id, u.first_name, u.username, u.subscriber_level
+            FROM users u
+            WHERE u.is_approved = 1
+              AND u.subscriber_level IN ({placeholders})
+              AND u.telegram_id != ?
+              AND u.telegram_id NOT IN (
+                  SELECT r.user_telegram_id
+                  FROM registrations r
+                  JOIN game_sessions gs ON gs.id = r.session_id
+                  WHERE gs.game_night_id = ?
+              )""",
+        (*levels, host_id, night_id),
+    ) as cur:
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def get_nights_for_passenger_notification() -> list[dict]:
+    """Игротеки, где:
+    - запись открыта,
+    - пассажирам уже можно (≤ 8 часов до самой ранней игры),
+    - пассажиры ещё не уведомлены.
+    """
+    async with db.conn.execute(
+        """SELECT gn.id, gn.date, gn.location
+           FROM game_nights gn
+           WHERE gn.registration_open = 1
+             AND gn.passenger_notified_at IS NULL
+             AND gn.date >= date('now')"""
+    ) as cur:
+        nights = [dict(r) for r in await cur.fetchall()]
+
+    result = []
+    now = club_now()
+
+    for n in nights:
+        sessions = await get_night_sessions(n["id"])
+        if not sessions:
+            continue
+
+        earliest_time = min(s["time_start"] for s in sessions)
+        session_dt = session_datetime(n["date"], earliest_time)
+        if session_dt is None:
+            continue
+
+        delta = session_dt - now
+        if timedelta(0) <= delta <= timedelta(hours=8):
+            result.append(n)
+
+    return result
+
+
+async def mark_passenger_notified(night_id: int) -> None:
+    await db.conn.execute(
+        "UPDATE game_nights SET passenger_notified_at = CURRENT_TIMESTAMP "
+        "WHERE id = ?",
+        (night_id,),
+    )
+    await db.conn.commit()
+
+
 # ---------- Записи на игры ----------
 
 async def register_for_session(session_id: int, user_id: int) -> tuple[bool, str]:
@@ -366,6 +547,7 @@ async def register_for_session(session_id: int, user_id: int) -> tuple[bool, str
         async with db.conn.execute(
             """SELECT gs.max_slots, gs.slots_taken,
                       gs.time_start, gs.time_end,
+                      gs.game_night_id,
                       gs.registration_opens_at,
                       gs.registration_min_level,
                       gs.registration_approved,
@@ -384,6 +566,11 @@ async def register_for_session(session_id: int, user_id: int) -> tuple[bool, str
         if row is None:
             await db.conn.rollback()
             return False, "Сессия не найдена или пользователь не зарегистрирован."
+
+        can, reason = await can_register_for_night(row["game_night_id"], user_id)
+        if not can:
+            await db.conn.rollback()
+            return False, reason
 
         if row["is_subscriber_only"] and row["subscriber_level"] not in ("provodnik", "host"):
             await db.conn.rollback()
@@ -407,7 +594,6 @@ async def register_for_session(session_id: int, user_id: int) -> tuple[bool, str
             await db.conn.rollback()
             return False, "Вы уже записаны на эту игру."
 
-        # Проверка пересечения с другими записями
         async with db.conn.execute(
             """SELECT gs.time_start, gs.time_end,
                       g.title AS game_title,
@@ -473,10 +659,6 @@ async def list_user_registrations(user_id: int) -> list[dict]:
 
 
 async def cancel_registration(reg_id: int, user_id: int) -> dict | None:
-    """Отменяет запись.
-
-    Возвращает данные отменённой сессии (для уведомлений) или None.
-    """
     async with db.conn.execute(
         """SELECT r.session_id,
                   gs.time_start, gs.time_end,
@@ -527,6 +709,10 @@ async def cancel_registration(reg_id: int, user_id: int) -> dict | None:
 async def get_night(night_id: int) -> dict | None:
     async with db.conn.execute(
         """SELECT gn.id, gn.date, gn.location, gn.host_telegram_id,
+                  gn.registration_open,
+                  gn.registration_opened_at,
+                  gn.registration_opened_by,
+                  gn.passenger_notified_at,
                   COUNT(gs.id) AS sessions_count,
                   COALESCE(SUM(gs.slots_taken), 0) AS total_taken
            FROM game_nights gn
@@ -724,7 +910,6 @@ async def close_availability_poll(poll_id: int) -> None:
 
 
 async def get_night_participants(night_id: int) -> list[dict]:
-    """Уникальные пользователи, записанные хотя бы на одну игру игротеки."""
     async with db.conn.execute(
         """SELECT DISTINCT u.telegram_id, u.first_name, u.username
            FROM registrations r
@@ -737,7 +922,6 @@ async def get_night_participants(night_id: int) -> list[dict]:
 
 
 async def list_all_users_grouped() -> dict:
-    """Список пользователей, сгруппированный по уровню."""
     async with db.conn.execute(
         """SELECT telegram_id, username, first_name, last_name,
                   subscriber_level, is_approved
@@ -760,37 +944,3 @@ async def list_all_users_grouped() -> dict:
             if level in groups:
                 groups[level].append(r)
     return groups
-
-async def create_game(
-    title: str,
-    genre: str | None,
-    min_players: int,
-    max_players: int,
-    duration_min: int,
-    duration_max: int,
-    is_subscriber_only: int,
-    owner_user_id: int | None,
-    owner_label: str,
-) -> int:
-    """Создаёт игру в каталоге. Возвращает id."""
-    cur = await db.conn.execute(
-        """INSERT INTO games
-           (title, genre, min_players, max_players,
-            duration_min, duration_max, is_subscriber_only,
-            owner_user_id, owner)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (title, genre, min_players, max_players,
-         duration_min, duration_max, is_subscriber_only,
-         owner_user_id, owner_label),
-    )
-    await db.conn.commit()
-    return cur.lastrowid
-
-
-async def game_title_exists(title: str) -> bool:
-    """Проверяет, есть ли уже игра с таким названием (без учёта регистра)."""
-    async with db.conn.execute(
-        "SELECT 1 FROM games WHERE LOWER(title) = LOWER(?) LIMIT 1",
-        (title,),
-    ) as cur:
-        return await cur.fetchone() is not None

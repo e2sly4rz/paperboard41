@@ -87,6 +87,7 @@ async def sessions_manage(call: CallbackQuery) -> None:
                 is_owner=can_manage,
                 has_active_poll=bool(poll),
                 has_any_poll=bool(poll),
+                registration_open=bool(night["registration_open"]),
             ),
         )
         await call.answer()
@@ -221,6 +222,7 @@ async def session_delete_confirm_yes(call: CallbackQuery) -> None:
                 is_owner=can_manage,
                 has_active_poll=bool(poll),
                 has_any_poll=bool(poll),
+                registration_open=bool(night["registration_open"]),
             ),
         )
     else:
@@ -311,6 +313,7 @@ async def _finalize_add_session(message, state: FSMContext,
                 is_owner=False,
                 has_active_poll=bool(poll),
                 has_any_poll=bool(poll),
+                registration_open=bool(night["registration_open"]),
             ),
         )
 

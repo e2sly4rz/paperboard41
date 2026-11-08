@@ -14,6 +14,7 @@ from database.queries import (
     get_active_poll_for_night,
     upsert_availability_response,
     find_session_conflict_for_user,
+    can_register_for_night,
 )
 from keyboards.menus import (
     nights_list,
@@ -64,11 +65,15 @@ async def show_night(call: CallbackQuery) -> None:
     night = await get_night(night_id)
     poll = await get_active_poll_for_night(night_id)
 
+    can, reason = await can_register_for_night(night_id, call.from_user.id)
+
     header = (
         f"🎲 <b>Игротека {fmt_date(night['date'])}</b>\n"
         f"📍 {night['location']}\n"
         f"Игр: {night['sessions_count']} • Записей: {night['total_taken']}"
     )
+    if not can:
+        header += f"\n\n🔒 {reason}"
     if poll:
         header += "\n\n📊 Хост собирает удобное время для игр."
 
@@ -104,7 +109,6 @@ async def show_session(call: CallbackQuery) -> None:
     user = await get_user(call.from_user.id)
     level = user["subscriber_level"] if user else "passenger"
 
-    # Уже записан?
     async with db.conn.execute(
         "SELECT 1 FROM registrations WHERE session_id = ? AND user_telegram_id = ?",
         (session_id, call.from_user.id),
@@ -119,7 +123,6 @@ async def show_session(call: CallbackQuery) -> None:
         )
         return
 
-    # Конфликт по времени?
     conflict = await find_session_conflict_for_user(session_id, call.from_user.id)
     if conflict:
         c_start = conflict["time_start"]
@@ -130,6 +133,11 @@ async def show_session(call: CallbackQuery) -> None:
             f"Сначала отмените ту запись в «🎲 Мои записи».",
             show_alert=True,
         )
+        return
+
+    can, reason = await can_register_for_night(s["night_id"], call.from_user.id)
+    if not can:
+        await call.answer(reason, show_alert=True)
         return
 
     can_register = (
@@ -184,7 +192,6 @@ async def do_register(call: CallbackQuery) -> None:
         reply_markup=session_card(session_id, s["night_id"], False),
     )
 
-    # Уведомление автору игры о новой записи
     user = await get_user(call.from_user.id)
     player_name = "Без имени"
     if user:

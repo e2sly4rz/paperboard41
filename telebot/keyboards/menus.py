@@ -41,8 +41,9 @@ def admin_help_back() -> InlineKeyboardMarkup:
 def nights_list(nights: list[dict]) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for n in nights:
+        status = "🔓" if n.get("registration_open") else "🔒"
         kb.button(
-            text=f"{_fmt_date(n['date'])} • {n['location']} "
+            text=f"{status} {_fmt_date(n['date'])} • {n['location']} "
                  f"(игр: {n['sessions_count']})",
             callback_data=f"night:{n['id']}",
         )
@@ -52,14 +53,6 @@ def nights_list(nights: list[dict]) -> InlineKeyboardMarkup:
 
 
 def sessions_list(night_id: int, sessions: list[dict]) -> InlineKeyboardMarkup:
-    """Список игр — каждая игра одной кнопкой.
-
-    В кнопке только маркер заполненности по проценту:
-    🟢 0–25%, 🟡 26–50%, 🟠 51–75%, 🔴 76–99%, ⛔ 100%.
-
-    Статусы «уже записан», «только для Проводника», «конфликт»
-    показываются при нажатии — всплывающим или в карточке.
-    """
     kb = InlineKeyboardBuilder()
     for s in sessions:
         taken = s["max_slots"] - s["free_slots"]
@@ -162,10 +155,15 @@ def host_night_card(night_id: int, is_owner: bool = True) -> InlineKeyboardMarku
 
 def host_night_card_with_poll(night_id: int, is_owner: bool = True,
                               has_active_poll: bool = False,
-                              has_any_poll: bool = False) -> InlineKeyboardMarkup:
+                              has_any_poll: bool = False,
+                              registration_open: bool = False) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.button(text="➕ Добавить игру", callback_data=f"hn_add:{night_id}")
     kb.button(text="🎲 Управление играми", callback_data=f"hn_sessions:{night_id}")
+
+    if is_owner and not registration_open:
+        kb.button(text="🔓 Открыть запись",
+                  callback_data=f"night_open:{night_id}")
 
     if has_active_poll:
         kb.button(text="📊 Результаты опроса",

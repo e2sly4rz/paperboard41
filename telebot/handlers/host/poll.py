@@ -56,6 +56,7 @@ async def poll_create(call: CallbackQuery) -> None:
         reply_markup=host_night_card_with_poll(
             night_id, is_owner=True,
             has_active_poll=True, has_any_poll=True,
+            registration_open=bool(night["registration_open"]),
         ),
     )
     await call.answer()
@@ -84,6 +85,7 @@ async def poll_results(call: CallbackQuery) -> None:
             reply_markup=host_night_card_with_poll(
                 night_id, is_owner=True,
                 has_active_poll=True, has_any_poll=True,
+                registration_open=bool(night["registration_open"]),
             ),
         )
         await call.answer()

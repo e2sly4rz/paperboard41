@@ -12,7 +12,11 @@ from database.queries import (
     get_user_day_registrations,
     was_day_notification_sent,
     log_day_notification,
+    get_nights_for_passenger_notification,
+    get_users_for_registration_notification_by_levels,
+    mark_passenger_notified,
 )
+from notifications import notify_registration_opened
 from utils import fmt_date
 
 
@@ -112,6 +116,37 @@ async def check_and_send_reminders(bot: Bot) -> None:
             )
 
 
+async def check_passenger_registration_notifications(bot: Bot) -> None:
+    """Проверяет игротеки, где пассажирам уже можно записаться,
+    и отправляет им уведомление об открытии (один раз на игротеку).
+    """
+    nights = await get_nights_for_passenger_notification()
+
+    for night in nights:
+        users = await get_users_for_registration_notification_by_levels(
+            night["id"], ["passenger"]
+        )
+        if not users:
+            await mark_passenger_notified(night["id"])
+            continue
+
+        sent = await notify_registration_opened(
+            bot,
+            users,
+            initiator_id=0,
+            night_date=night["date"],
+            night_location=night["location"],
+            night_id=night["id"],
+            target_level="passenger",
+        )
+
+        await mark_passenger_notified(night["id"])
+        logging.info(
+            "Пассажирам отправлено уведомление: night=%s sent=%d",
+            night["id"], sent,
+        )
+
+
 def start_scheduler(bot: Bot) -> None:
     scheduler.add_job(
         check_and_send_reminders,
@@ -123,9 +158,21 @@ def start_scheduler(bot: Bot) -> None:
         max_instances=1,
         coalesce=True,
     )
+
+    scheduler.add_job(
+        check_passenger_registration_notifications,
+        trigger="interval",
+        minutes=10,
+        args=[bot],
+        id="check_passenger_notifications",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+
     scheduler.start()
     logging.info(
-        "Планировщик напоминаний запущен "
+        "Планировщик напоминаний и уведомлений запущен "
         "(проверка каждые 10 минут, часовой пояс: %s)",
         CLUB_TIMEZONE,
     )
