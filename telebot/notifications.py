@@ -271,18 +271,6 @@ async def notify_registration_opened(
     if target_level == "provodnik":
         header = "🔓 <b>Запись открыта</b>"
         body = "Откройте «📅 Расписание» → эту игротеку и запишитесь на игры."
-
-        kb = InlineKeyboardBuilder()
-        kb.button(
-            text="⏰ Указать удобное время",
-            callback_data=f"poll_answer:{night_id}",
-        )
-        kb.button(
-            text="❌ Не смогу прийти",
-            callback_data=f"poll_unavailable_notify:{night_id}",
-        )
-        kb.adjust(1)
-        reply_markup = kb.as_markup()
     else:
         if early:
             header = "🔓 <b>Запись открыта для всех</b>"
@@ -297,7 +285,12 @@ async def notify_registration_opened(
                 "До начала игры осталось меньше 8 часов — запись открыта для всех.\n"
                 "Откройте «📅 Расписание» → эту игротеку и запишитесь."
             )
-        reply_markup = None
+
+    # NEW: единая кнопка «Открыть расписание» для всех уровней
+    kb = InlineKeyboardBuilder()
+    kb.button(text="📅 Открыть расписание", callback_data="schedule")
+    kb.adjust(1)
+    reply_markup = kb.as_markup()
 
     user_ids = [
         u["telegram_id"] for u in users
