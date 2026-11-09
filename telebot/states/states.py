@@ -4,6 +4,7 @@ from aiogram.fsm.state import State, StatesGroup
 class CreateNight(StatesGroup):
     date = State()
     location = State()
+    is_free = State()          # NEW
     searching_game = State()
     picking_game = State()
     time_start = State()

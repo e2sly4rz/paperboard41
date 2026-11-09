@@ -71,6 +71,18 @@ async def cmd_start(message: Message) -> None:
         )
         return
 
+    # NEW: приветствие гостя
+    if user["subscriber_level"] == "guest":
+        await message.answer(
+            f"🎫 <b>Привет, {u.first_name}!</b>\n\n"
+            f"Это бот клуба настольных игр «{CLUB_NAME}».\n\n"
+            f"Вы — гость клуба. Можете записываться на бесплатные "
+            f"игротеки (отмечены 🆓 в расписании).\n\n"
+            f"Для доступа к платным играм обратитесь к организатору.",
+            reply_markup=main_menu(False, u.id),
+        )
+        return
+
     provodnik_note = ""
     if user["subscriber_level"] == "provodnik":
         provodnik_note = (
@@ -114,7 +126,8 @@ ADMIN_HELP_TEXT = (
     "<b>Управление ролями</b>\n"
     "<code>/grant &lt;id&gt; host</code> — сделать организатором\n"
     "<code>/grant &lt;id&gt; provodnik</code> — выдать «Проводника»\n"
-    "<code>/grant &lt;id&gt; passenger</code> — сделать пассажиром\n\n"
+    "<code>/grant &lt;id&gt; passenger</code> — сделать пассажиром\n"
+    "<code>/grant &lt;id&gt; guest</code> — сделать гостем\n\n"
 
     "<b>Пользователи</b>\n"
     "<code>/users</code> — список всех пользователей с уровнями\n\n"
@@ -232,7 +245,7 @@ async def grant_role(message: Message) -> None:
     parts = message.text.split()
     if len(parts) != 3:
         await message.answer(
-            "Использование: /grant <telegram_id> host|provodnik|passenger"
+            "Использование: /grant <telegram_id> host|provodnik|passenger|guest"
         )
         return
     try:
@@ -241,13 +254,14 @@ async def grant_role(message: Message) -> None:
         await message.answer("telegram_id должен быть числом.")
         return
     level = parts[2]
-    if level not in ("host", "provodnik", "passenger"):
+    if level not in ("host", "provodnik", "passenger", "guest"):
         await message.answer(
-            "Уровень должен быть host, provodnik или passenger."
+            "Уровень должен быть host, provodnik, passenger или guest."
         )
         return
     await set_user_level(target_id, level)
     await message.answer(f"Пользователю {target_id} установлен уровень {level}.")
+
 
 @router.message(Command("users"))
 async def cmd_users(message: Message) -> None:
@@ -281,6 +295,13 @@ async def cmd_users(message: Message) -> None:
     if groups["passenger"]:
         lines.append(f"🎲 <b>Пассажиры ({len(groups['passenger'])}):</b>")
         for u in groups["passenger"]:
+            lines.append(f"• {_fmt_user(u)}")
+        lines.append("")
+
+    # NEW: группа «Гости»
+    if groups["guest"]:
+        lines.append(f"🎫 <b>Гости ({len(groups['guest'])}):</b>")
+        for u in groups["guest"]:
             lines.append(f"• {_fmt_user(u)}")
         lines.append("")
 

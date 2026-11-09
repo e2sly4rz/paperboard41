@@ -35,8 +35,7 @@ CREATE TABLE IF NOT EXISTS users (
     username         TEXT,
     first_name       TEXT,
     last_name        TEXT,
-    subscriber_level TEXT NOT NULL DEFAULT 'passenger'
-        CHECK (subscriber_level IN ('host', 'provodnik', 'passenger')),
+    subscriber_level TEXT DEFAULT 'guest',
     is_approved      INTEGER DEFAULT 0,
     created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -61,6 +60,7 @@ CREATE TABLE IF NOT EXISTS game_nights (
     date                   DATE NOT NULL,
     location               TEXT NOT NULL,
     host_telegram_id       INTEGER,
+    is_free                INTEGER NOT NULL DEFAULT 0,
     registration_open      INTEGER NOT NULL DEFAULT 0,
     registration_opened_at TIMESTAMP,
     registration_opened_by INTEGER,
@@ -205,11 +205,6 @@ async def _run_migrations() -> None:
             "ALTER TABLE users ADD COLUMN is_approved INTEGER DEFAULT 0"
         )
 
-    await db.conn.execute(
-        "UPDATE users SET subscriber_level = 'passenger' "
-        "WHERE subscriber_level = 'guest'"
-    )
-
     if not await _column_exists("games", "owner_user_id"):
         await db.conn.execute(
             "ALTER TABLE games ADD COLUMN owner_user_id INTEGER"
@@ -256,6 +251,12 @@ async def _run_migrations() -> None:
     if not await _column_exists("game_nights", "passenger_notified_at"):
         await db.conn.execute(
             "ALTER TABLE game_nights ADD COLUMN passenger_notified_at TIMESTAMP"
+        )
+
+    if not await _column_exists("game_nights", "is_free"):
+        await db.conn.execute(
+            "ALTER TABLE game_nights ADD COLUMN is_free "
+            "INTEGER NOT NULL DEFAULT 0"
         )
 
     await db.conn.execute(

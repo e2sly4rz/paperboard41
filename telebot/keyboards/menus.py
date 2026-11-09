@@ -42,8 +42,10 @@ def nights_list(nights: list[dict]) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for n in nights:
         status = "🔓" if n.get("registration_open") else "🔒"
+        # NEW: маркер платности
+        free_marker = "🆓" if n.get("is_free") else "💰"
         kb.button(
-            text=f"{status} {_fmt_date(n['date'])} • {n['location']} "
+            text=f"{free_marker}{status} {_fmt_date(n['date'])} • {n['location']} "
                  f"(игр: {n['sessions_count']})",
             callback_data=f"night:{n['id']}",
         )
@@ -118,8 +120,10 @@ def host_menu_with_nights(nights: list[dict],
     for n in nights:
         is_own = own_ids is None or n["id"] in own_ids
         prefix = "🎩" if is_own else "👀"
+        # NEW: маркер платности
+        free_marker = "🆓" if n.get("is_free") else "💰"
         kb.button(
-            text=f"{prefix} {_fmt_date(n['date'])} • {n['location']} "
+            text=f"{free_marker}{prefix} {_fmt_date(n['date'])} • {n['location']} "
                  f"(игр: {n['sessions_count']}, записей: {n['total_taken']})",
             callback_data=f"hn:{n['id']}",
         )

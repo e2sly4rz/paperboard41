@@ -33,10 +33,21 @@ async def night_open(call: CallbackQuery) -> None:
         await call.answer("Не удалось открыть запись", show_alert=True)
         return
 
-    # Уведомляем Проводников и хостов
-    users = await get_users_for_registration_notification_by_levels(
-        night_id, ["provodnik", "host"]
-    )
+    # NEW: для бесплатной — рассылка всем, кроме хостов;
+    # для платной — только Проводникам и хостам (как раньше).
+    if night["is_free"]:
+        users = await get_users_for_registration_notification_by_levels(
+            night_id, ["passenger", "provodnik", "guest"]
+        )
+        target_level = "passenger"
+        early = True
+    else:
+        users = await get_users_for_registration_notification_by_levels(
+            night_id, ["provodnik", "host"]
+        )
+        target_level = "provodnik"
+        early = False
+
     sent = await notify_registration_opened(
         call.bot,
         users,
@@ -44,18 +55,22 @@ async def night_open(call: CallbackQuery) -> None:
         night_date=night["date"],
         night_location=night["location"],
         night_id=night_id,
-        target_level="provodnik",
+        target_level=target_level,
+        early=early,
+        is_free=bool(night["is_free"]),
     )
 
     night = await get_night(night_id)
     poll = await get_active_poll_for_night(night_id)
 
+    free_label = "🆓 Бесплатная" if night["is_free"] else "💰 Платная"
     text = (
         f"🔓 <b>Запись открыта</b>\n\n"
         f"📅 {fmt_date(night['date'])}\n"
         f"📍 {night['location']}\n"
+        f"{free_label}\n"
         f"Игр: {night['sessions_count']} • Записей: {night['total_taken']}\n\n"
-        f"Уведомлено Проводников и хостов: {sent}\n\n"
+        f"Уведомлено: {sent}\n\n"
         f"<i>Пассажиры получат уведомление за 8 часов до начала.</i>"
     )
 

@@ -91,11 +91,14 @@ async def night_card(call: CallbackQuery) -> None:
             })
 
     reg_status = "🔓 открыта" if night["registration_open"] else "🔒 закрыта"
+    # NEW: статус платности
+    free_status = "🆓 Бесплатная" if night["is_free"] else "💰 Платная"
 
     lines = [
         "🎲 <b>Игротека</b>",
         f"📅 {fmt_date(night['date'])}",
         f"📍 {night['location']}",
+        f"{free_status}",
         f"Игр: {night['sessions_count']} • Записей: {night['total_taken']}",
         f"Запись: {reg_status}",
     ]

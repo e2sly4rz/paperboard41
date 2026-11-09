@@ -123,8 +123,15 @@ async def check_passenger_registration_notifications(bot: Bot) -> None:
     nights = await get_nights_for_passenger_notification()
 
     for night in nights:
+        # NEW: для бесплатной — пассажирам, проводникам и гостям, кроме хостов;
+        # для платной — как раньше (только пассажирам).
+        if night.get("is_free"):
+            levels = ["passenger", "provodnik", "guest"]
+        else:
+            levels = ["passenger"]
+
         users = await get_users_for_registration_notification_by_levels(
-            night["id"], ["passenger"]
+            night["id"], levels
         )
         if not users:
             await mark_passenger_notified(night["id"])
@@ -138,12 +145,14 @@ async def check_passenger_registration_notifications(bot: Bot) -> None:
             night_location=night["location"],
             night_id=night["id"],
             target_level="passenger",
+            early=bool(night.get("early")),
+            is_free=bool(night.get("is_free")),
         )
 
         await mark_passenger_notified(night["id"])
         logging.info(
-            "Пассажирам отправлено уведомление: night=%s sent=%d",
-            night["id"], sent,
+            "Уведомление об открытии записи: night=%s is_free=%s sent=%d",
+            night["id"], night.get("is_free"), sent,
         )
 
 

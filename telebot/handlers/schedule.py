@@ -71,8 +71,12 @@ async def show_night(call: CallbackQuery) -> None:
 
     can, reason = await can_register_for_night(night_id, call.from_user.id)
 
+    # NEW: маркер платности в шапке
+    free_label = "🆓 Бесплатная игротека" if night["is_free"] else "💰 Платная игротека"
+
     header = (
         f"🎲 <b>Игротека {fmt_date(night['date'])}</b>\n"
+        f"{free_label}\n"
         f"📍 {night['location']}\n"
         f"Игр: {night['sessions_count']} • Записей: {night['total_taken']}"
     )
@@ -151,11 +155,13 @@ async def show_session(call: CallbackQuery) -> None:
     )
 
     taken = s["max_slots"] - s["free_slots"]
+    free_label = "🆓 Бесплатная игротека" if s.get("is_free") else "💰 Платная игротека"
     text = (
         f"🎲 <b>{s['title']}</b>\n"
         f"Дата: {fmt_date(s['date'])}\n"
         f"Время: {s['time_start']}–{s['time_end'] or '?'}\n"
         f"Место: {s['location']}\n"
+        f"{free_label}\n"
         f"Занято мест: {taken} из {s['max_slots']}\n"
     )
     if s["is_subscriber_only"]:

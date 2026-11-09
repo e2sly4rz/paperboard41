@@ -263,7 +263,11 @@ async def notify_registration_opened(
     night_id: int,
     target_level: str,
     early: bool = False,
+    is_free: bool = False,
 ) -> int:
+    # NEW: пометка платности в шапке
+    free_line = "🆓 Бесплатная игротека\n" if is_free else "💰 Платная игротека\n"
+
     if target_level == "provodnik":
         header = "🔓 <b>Запись открыта</b>"
         body = "Откройте «📅 Расписание» → эту игротеку и запишитесь на игры."
@@ -283,8 +287,8 @@ async def notify_registration_opened(
         if early:
             header = "🔓 <b>Запись открыта для всех</b>"
             body = (
-                "Проводники уже записались на игры — запись открыта "
-                "для пассажиров раньше срока.\n\n"
+                "Запись на эту игротеку открыта для всех уровней "
+                "сразу после открытия.\n\n"
                 "Откройте «📅 Расписание» → эту игротеку и запишитесь."
             )
         else:
@@ -303,7 +307,8 @@ async def notify_registration_opened(
     def build_text(uid: int) -> str:
         return (
             f"{header}\n\n"
-            f"📅 {fmt_date(night_date)} • {night_location}\n\n"
+            f"📅 {fmt_date(night_date)} • {night_location}\n"
+            f"{free_line}\n"
             f"{body}"
         )
 

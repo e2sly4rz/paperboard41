@@ -70,7 +70,8 @@ async def _finalize_session(message, state: FSMContext,
     night_id = data.get("night_id")
     if night_id is None:
         night_id = await create_game_night(
-            data["date"], data["location"], user_id
+            data["date"], data["location"], user_id,
+            is_free=data.get("is_free", 0),
         )
         await state.update_data(night_id=night_id)
 
@@ -162,6 +163,26 @@ async def enter_date(
 @router.message(CreateNight.location)
 async def enter_location(message: Message, state: FSMContext) -> None:
     await state.update_data(location=message.text.strip())
+    await state.set_state(CreateNight.is_free)
+
+    kb = InlineKeyboardBuilder()
+    kb.button(text="💰 Платная", callback_data="host_free:0")
+    kb.button(text="🆓 Бесплатная", callback_data="host_free:1")
+    kb.adjust(2)
+
+    await message.answer(
+        "💰 <b>Игротека платная или бесплатная?</b>\n\n"
+        "На бесплатные игротеки могут записываться гости, "
+        "запись открывается сразу всем уровням.",
+        parse_mode="HTML",
+        reply_markup=kb.as_markup(),
+    )
+
+
+@router.callback_query(CreateNight.is_free, F.data.startswith("host_free:"))
+async def pick_is_free(call: CallbackQuery, state: FSMContext) -> None:
+    is_free = int(call.data.split(":")[1])
+    await state.update_data(is_free=is_free)
     await state.set_state(CreateNight.searching_game)
 
     kb = InlineKeyboardBuilder()
@@ -169,13 +190,17 @@ async def enter_location(message: Message, state: FSMContext) -> None:
     kb.button(text="❌ Отмена", callback_data="host_cancel")
     kb.adjust(1)
 
-    await message.answer(
-        "🔍 <b>Поиск игры</b>\n\n"
-        "Введите название или его часть (например, <code>catan</code>):\n\n"
-        "<i>Или создайте игротеку без игр — добавите их позже.</i>",
+    free_label = "🆓 бесплатная" if is_free else "💰 платная"
+    await safe_edit(
+        call.message,
+        f"🔍 <b>Поиск игры</b>\n\n"
+        f"Игротека: {free_label}.\n\n"
+        f"Введите название или его часть (например, <code>catan</code>):\n\n"
+        f"<i>Или создайте игротеку без игр — добавите их позже.</i>",
         parse_mode="HTML",
         reply_markup=kb.as_markup(),
     )
+    await call.answer()
 
 
 @router.callback_query(F.data == "host_create_search_again")
@@ -409,6 +434,7 @@ async def host_finish(call: CallbackQuery, state: FSMContext) -> None:
     night_id = data.get("night_id")
     date = data.get("date")
     location = data.get("location")
+    is_free = data.get("is_free", 0)
 
     await state.clear()
 
@@ -417,10 +443,12 @@ async def host_finish(call: CallbackQuery, state: FSMContext) -> None:
         night = await get_night(night_id)
         poll = await get_active_poll_for_night(night_id)
 
+        free_label = "🆓 Бесплатная" if night["is_free"] else "💰 Платная"
         text = (
             f"✅ <b>Игротека создана</b>\n\n"
             f"📅 {fmt_date(night['date'])}\n"
             f"📍 {night['location']}\n"
+            f"{free_label}\n"
             f"Игр: {night['sessions_count']} • Записей: {night['total_taken']}\n\n"
             f"Добавьте игры и откройте запись, когда будете готовы."
         )
@@ -442,14 +470,17 @@ async def host_finish(call: CallbackQuery, state: FSMContext) -> None:
     # Случай 2: игры не добавлялись, но дата и место введены — создаём пустую игротеку
     if date and location:
         night_id = await create_game_night(
-            date, location, call.from_user.id
+            date, location, call.from_user.id,
+            is_free=is_free,
         )
         night = await get_night(night_id)
 
+        free_label = "🆓 Бесплатная" if night["is_free"] else "💰 Платная"
         text = (
             f"✅ <b>Игротека создана</b>\n\n"
             f"📅 {fmt_date(night['date'])}\n"
             f"📍 {night['location']}\n"
+            f"{free_label}\n"
             f"Игр: 0 • Записей: 0\n\n"
             f"<i>Пока в игротеке нет игр. Добавьте их через «➕ Добавить игру», "
             f"когда будете готовы.</i>\n\n"
