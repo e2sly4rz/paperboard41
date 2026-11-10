@@ -125,6 +125,45 @@ async def notify_game_owner_deleted(
     await _safe_send(bot, owner_id, text)
 
 
+async def notify_night_deleted(
+    bot: Bot,
+    registrants: list[dict],
+    initiator_id: int,
+    *,
+    night_date: str,
+    night_location: str,
+    games_by_user: dict[int, list[dict]],
+) -> None:
+    """Уведомляет записанных на игры удаляемой игротеки.
+
+    registrants — строки (по одной на пользователя, уже сгруппированные
+    в handlers/host/delete.py), в каждой есть telegram_id.
+    games_by_user — {telegram_id: [{game_title, time_start, time_end}, ...]}.
+    """
+    for r in registrants:
+        user_id = r.get("telegram_id")
+        if not user_id or user_id == initiator_id:
+            continue
+
+        games = games_by_user.get(user_id, [])
+        if not games:
+            continue
+
+        lines = [
+            "❌ <b>Игротека отменена</b>",
+            "",
+            f"📅 {fmt_date(night_date)} • {night_location}",
+            "",
+            "Вы были записаны на:",
+        ]
+        for g in games:
+            time_range = f"{g['time_start']}–{g['time_end'] or '?'}"
+            lines.append(f"🎲 {g['game_title']} — {time_range}")
+
+        text = "\n".join(lines)
+        await _safe_send(bot, user_id, text)
+
+
 async def notify_poll_created(
     bot: Bot,
     users: list[dict],
@@ -265,7 +304,6 @@ async def notify_registration_opened(
     early: bool = False,
     is_free: bool = False,
 ) -> int:
-    # NEW: пометка платности в шапке
     free_line = "🆓 Бесплатная игротека\n" if is_free else "💰 Платная игротека\n"
 
     if target_level == "provodnik":
@@ -274,19 +312,10 @@ async def notify_registration_opened(
     else:
         if early:
             header = "🔓 <b>Запись открыта для всех</b>"
-            body = (
-                "Запись на эту игротеку открыта для всех уровней "
-                "сразу после открытия.\n\n"
-                "Откройте «📅 Расписание» → эту игротеку и запишитесь."
-            )
         else:
             header = "🔓 <b>Запись открыта для пассажиров</b>"
-            body = (
-                "До начала игры осталось меньше 8 часов — запись открыта для всех.\n"
-                "Откройте «📅 Расписание» → эту игротеку и запишитесь."
-            )
+        body = "Откройте «📅 Расписание» → эту игротеку и запишитесь."
 
-    # NEW: единая кнопка «Открыть расписание» для всех уровней
     kb = InlineKeyboardBuilder()
     kb.button(text="📅 Открыть расписание", callback_data="schedule")
     kb.adjust(1)

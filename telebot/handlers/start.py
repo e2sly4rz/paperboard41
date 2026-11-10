@@ -1,6 +1,7 @@
 from aiogram import Router, F
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message, CallbackQuery
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from config import ADMIN_ID
 from database.queries import (
@@ -47,11 +48,20 @@ async def cmd_start(message: Message) -> None:
         try:
             name = f"{u.first_name or ''} {u.last_name or ''}".strip() or "Без имени"
             username = f" (@{u.username})" if u.username else ""
+
+            kb = InlineKeyboardBuilder()
+            kb.button(
+                text="✅ Одобрить",
+                callback_data=f"approve_user:{u.id}",
+            )
+            kb.adjust(1)
+
             await message.bot.send_message(
                 ADMIN_ID,
                 f"🔔 <b>Новая заявка на доступ</b>\n"
                 f"• <code>{u.id}</code> — {name}{username}\n\n"
                 f"Одобрить: /approve {u.id}",
+                reply_markup=kb.as_markup(),
             )
         except Exception:
             pass
@@ -214,6 +224,44 @@ async def cmd_approve(message: Message) -> None:
     await message.answer(f"✅ Пользователь {target_id} одобрен.")
     try:
         await message.bot.send_message(
+            target_id,
+            f"✅ <b>Доступ открыт!</b>\n\n"
+            f"Организатор клуба «{CLUB_NAME}» подтвердил вашу заявку.\n"
+            f"Отправьте /start, чтобы начать.",
+        )
+    except Exception:
+        pass
+
+
+@router.callback_query(F.data.startswith("approve_user:"))
+async def cb_approve_user(call: CallbackQuery) -> None:
+    if not is_admin(call.from_user.id):
+        await call.answer("Только для администратора", show_alert=True)
+        return
+
+    target_id = int(call.data.split(":")[1])
+    ok = await approve_user(target_id)
+    if not ok:
+        await call.answer(
+            "Пользователь не найден в БД. "
+            "Попросите его отправить /start боту.",
+            show_alert=True,
+        )
+        return
+
+    await call.answer("✅ Пользователь одобрен")
+
+    try:
+        await call.message.edit_text(
+            f"✅ <b>Заявка одобрена</b>\n\nID: <code>{target_id}</code>",
+            parse_mode="HTML",
+            reply_markup=None,
+        )
+    except Exception:
+        pass
+
+    try:
+        await call.bot.send_message(
             target_id,
             f"✅ <b>Доступ открыт!</b>\n\n"
             f"Организатор клуба «{CLUB_NAME}» подтвердил вашу заявку.\n"

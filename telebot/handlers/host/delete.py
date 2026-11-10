@@ -6,6 +6,7 @@ from database.queries import (
     delete_night,
     count_registrations_for_night,
     list_all_upcoming_nights,
+    get_all_night_registrations,
 )
 from keyboards.menus import (
     confirm_delete_night,
@@ -13,6 +14,7 @@ from keyboards.menus import (
     host_menu_empty,
 )
 from utils import fmt_date
+from notifications import notify_night_deleted
 
 from ._helpers import can_manage_night
 
@@ -32,7 +34,7 @@ async def night_delete_confirm(call: CallbackQuery) -> None:
     if reg_count > 0:
         warning = (
             f"\n\n⚠️ На игры этой игротеки записано {reg_count} чел. "
-            "Все записи будут удалены без уведомления."
+            "Все записи будут удалены, записанным придёт уведомление."
         )
 
     await call.message.edit_text(
@@ -54,7 +56,37 @@ async def night_delete_confirm_yes(call: CallbackQuery) -> None:
         await call.answer("Нет доступа", show_alert=True)
         return
 
+    # NEW: собираем записанных ДО удаления (каскад снесёт registrations)
+    rows = await get_all_night_registrations(night_id)
+
+    games_by_user: dict[int, list[dict]] = {}
+    registrants_map: dict[int, dict] = {}
+    for r in rows:
+        uid = r["telegram_id"]
+        if not uid:
+            continue
+        registrants_map[uid] = r
+        games_by_user.setdefault(uid, []).append({
+            "game_title": r["game_title"],
+            "time_start": r["time_start"],
+            "time_end": r["time_end"],
+        })
+
+    night_date = night["date"]
+    night_location = night["location"]
+
     await delete_night(night_id)
+
+    # NEW: уведомляем записанных
+    if registrants_map:
+        await notify_night_deleted(
+            call.bot,
+            list(registrants_map.values()),
+            call.from_user.id,
+            night_date=night_date,
+            night_location=night_location,
+            games_by_user=games_by_user,
+        )
 
     nights = await list_all_upcoming_nights()
     own_ids = {
