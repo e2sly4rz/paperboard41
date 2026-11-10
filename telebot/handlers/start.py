@@ -13,7 +13,7 @@ from database.queries import (
     list_all_users_grouped,
 )
 from keyboards.menus import main_menu, admin_help_back
-from utils import is_admin
+from utils import is_admin, safe_edit
 
 router = Router()
 
@@ -71,7 +71,6 @@ async def cmd_start(message: Message) -> None:
         )
         return
 
-    # NEW: приветствие гостя
     if user["subscriber_level"] == "guest":
         await message.answer(
             f"🎫 <b>Привет, {u.first_name}!</b>\n\n"
@@ -106,7 +105,8 @@ async def back_main(call: CallbackQuery) -> None:
         bool(user and user["subscriber_level"] == "host")
         or is_admin(call.from_user.id)
     )
-    await call.message.edit_text(
+    await safe_edit(
+        call.message,
         "Главное меню:",
         reply_markup=main_menu(is_host_user, call.from_user.id),
     )
@@ -147,7 +147,8 @@ async def admin_help(call: CallbackQuery) -> None:
     if not is_admin(call.from_user.id):
         await call.answer("Только для администратора", show_alert=True)
         return
-    await call.message.edit_text(
+    await safe_edit(
+        call.message,
         ADMIN_HELP_TEXT,
         parse_mode="HTML",
         reply_markup=admin_help_back(),
@@ -298,7 +299,6 @@ async def cmd_users(message: Message) -> None:
             lines.append(f"• {_fmt_user(u)}")
         lines.append("")
 
-    # NEW: группа «Гости»
     if groups["guest"]:
         lines.append(f"🎫 <b>Гости ({len(groups['guest'])}):</b>")
         for u in groups["guest"]:

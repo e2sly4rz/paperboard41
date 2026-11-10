@@ -57,21 +57,14 @@ async def show_night(call: CallbackQuery) -> None:
     night_id = int(call.data.split(":")[1])
     sessions = await get_night_sessions_with_conflicts(night_id, call.from_user.id)
 
-    if not sessions:
-        await safe_edit(
-            call.message,
-            "В этой игротеке пока нет игр.",
-            reply_markup=nights_list(await list_upcoming_nights()),
-        )
-        await call.answer()
+    night = await get_night(night_id)
+    if not night:
+        await call.answer("Игротека не найдена", show_alert=True)
         return
 
-    night = await get_night(night_id)
     poll = await get_active_poll_for_night(night_id)
-
     can, reason = await can_register_for_night(night_id, call.from_user.id)
 
-    # NEW: маркер платности в шапке
     free_label = "🆓 Бесплатная игротека" if night["is_free"] else "💰 Платная игротека"
 
     header = (
@@ -84,25 +77,34 @@ async def show_night(call: CallbackQuery) -> None:
         header += f"\n\n🔒 {reason}"
     if poll:
         header += "\n\n📊 Хост собирает удобное время для игр."
+    if not sessions:
+        header += "\n\n<i>В этой игротеке пока нет игр.</i>"
 
-    kb = sessions_list(night_id, sessions)
+    # Кнопки: опрос (если есть) + сессии (если есть) + назад
+    builder = InlineKeyboardBuilder()
     if poll:
-        builder = InlineKeyboardBuilder()
         builder.button(
             text="⏰ Указать удобное время",
             callback_data=f"poll_answer:{night_id}",
         )
-        for row in kb.inline_keyboard:
+        builder.button(
+            text="❌ Не смогу прийти",
+            callback_data=f"poll_unavailable_notify:{night_id}",
+        )
+    if sessions:
+        sessions_kb = sessions_list(night_id, sessions)
+        for row in sessions_kb.inline_keyboard:
             for btn in row:
                 builder.button(text=btn.text, callback_data=btn.callback_data)
-        builder.adjust(1)
-        kb = builder.as_markup()
+    else:
+        builder.button(text="⬅️ К расписанию", callback_data="schedule")
+    builder.adjust(1)
 
     await safe_edit(
         call.message,
         header,
         parse_mode="HTML",
-        reply_markup=kb,
+        reply_markup=builder.as_markup(),
     )
     await call.answer()
 

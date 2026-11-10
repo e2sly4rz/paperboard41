@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from aiogram.types import InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from config import ADMIN_ID
@@ -332,9 +332,14 @@ def poll_time_grid(prefix: str, start_hour: int = 10,
     for hour in range(start_hour, end_hour + 1):
         t = f"{hour:02d}:00"
         kb.button(text=t, callback_data=f"{prefix}:{t}")
-    kb.button(text="❌ Не смогу прийти", callback_data="poll_unavailable")
-    kb.button(text="⬅️ Отмена", callback_data="back_main")
     kb.adjust(4)
+
+    kb.row(InlineKeyboardButton(
+        text="❌ Не смогу прийти", callback_data="poll_unavailable"
+    ))
+    kb.row(InlineKeyboardButton(
+        text="⬅️ Отмена", callback_data="back_main"
+    ))
     return kb.as_markup()
 
 
@@ -346,6 +351,9 @@ def poll_time_grid_after(prefix: str, after: str,
     for hour in range(max(start_hour, after_h + 1), end_hour + 1):
         t = f"{hour:02d}:00"
         kb.button(text=t, callback_data=f"{prefix}:{t}")
-    kb.button(text="❌ Отмена", callback_data="back_main")
     kb.adjust(4)
+
+    kb.row(InlineKeyboardButton(
+        text="❌ Отмена", callback_data="back_main"
+    ))
     return kb.as_markup()

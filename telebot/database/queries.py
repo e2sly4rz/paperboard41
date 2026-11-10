@@ -1063,14 +1063,25 @@ async def get_users_for_poll_notification(night_id: int) -> list[dict]:
 
     host_id = night["host_telegram_id"] or 0
 
-    async with db.conn.execute(
-        """SELECT u.telegram_id, u.first_name, u.username, u.subscriber_level
-           FROM users u
-           WHERE u.is_approved = 1
-             AND u.telegram_id != ?
-           ORDER BY u.subscriber_level, u.first_name""",
-        (host_id,),
-    ) as cur:
+    if night["is_free"]:
+        # Бесплатная игротека — все, кроме хоста ночи
+        query = """SELECT u.telegram_id, u.first_name, u.username, u.subscriber_level
+                   FROM users u
+                   WHERE u.is_approved = 1
+                     AND u.telegram_id != ?
+                   ORDER BY u.subscriber_level, u.first_name"""
+        params = (host_id,)
+    else:
+        # Платная игротека — все, кроме хоста ночи и гостей
+        query = """SELECT u.telegram_id, u.first_name, u.username, u.subscriber_level
+                   FROM users u
+                   WHERE u.is_approved = 1
+                     AND u.telegram_id != ?
+                     AND u.subscriber_level != 'guest'
+                   ORDER BY u.subscriber_level, u.first_name"""
+        params = (host_id,)
+
+    async with db.conn.execute(query, params) as cur:
         return [dict(r) for r in await cur.fetchall()]
 
 
