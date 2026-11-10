@@ -75,13 +75,25 @@
   const countEl      = $("#count");
   const emptyEl      = $("#empty");
   const searchInput  = $("#search");
-  const diffSelect   = $("#filter-difficulty");
+  const diffChips    = $("#filter-difficulty");
   const genreSel     = $("#filter-genre");
-  const playersSel   = $("#filter-players");
-  const accessSel    = $("#filter-access");
+  const playersChips = $("#filter-players");
+  const accessChips  = $("#filter-access");
   const resetBtn     = $("#reset");
   const resetEmpty   = $("#reset-empty");
   const thead        = $(".catalog-table thead");
+
+  // Значение активного чипа в группе
+  const chipValue = (container) =>
+    container?.querySelector(".chip.is-active")?.dataset.value ?? null;
+
+  // Установить активный чип
+  const setChipValue = (container, value) => {
+    if (!container) return;
+    container.querySelectorAll(".chip").forEach(chip => {
+      chip.classList.toggle("is-active", chip.dataset.value === String(value));
+    });
+  };
 
   // === Жанры ===
   const genres = [...new Set(GAMES.map(g => g.genre).filter(Boolean))]
@@ -94,7 +106,7 @@
   });
 
   // === Состояние ===
-  let openName = null;
+  let openId = null;
   let sortKey  = "name";
   let sortDir  = "asc";
 
@@ -104,10 +116,10 @@
   function readStateFromURL() {
     const params = new URLSearchParams(location.search);
     searchInput.value = params.get("q") || "";
-    diffSelect.value  = params.get("diff")  || "any";
-    genreSel.value    = params.get("genre") || "";
-    playersSel.value  = params.get("p")     || "0";
-    accessSel.value   = params.get("a")     || "all";
+    setChipValue(diffChips,    params.get("diff")  || "any");
+    genreSel.value = params.get("genre") || "";
+    setChipValue(playersChips, params.get("p")     || "0");
+    setChipValue(accessChips,  params.get("a")     || "all");
 
     const s = params.get("sort");
     if (s) {
@@ -116,20 +128,23 @@
       if (d === "asc" || d === "desc") sortDir = d;
     }
 
-    openName = params.get("open") || null;
+    openId = params.get("game") || null;
   }
 
   function writeStateToURL() {
     const params = new URLSearchParams();
     if (searchInput.value.trim()) params.set("q", searchInput.value.trim());
-    if (diffSelect.value !== "any") params.set("diff", diffSelect.value);
-    if (genreSel.value)             params.set("genre", genreSel.value);
-    if (playersSel.value !== "0")   params.set("p", playersSel.value);
-    if (accessSel.value !== "all")  params.set("a", accessSel.value);
+    const diff    = chipValue(diffChips);
+    const players = chipValue(playersChips);
+    const access  = chipValue(accessChips);
+    if (diff && diff !== "any")          params.set("diff", diff);
+    if (genreSel.value)                  params.set("genre", genreSel.value);
+    if (players && players !== "0")      params.set("p", players);
+    if (access && access !== "all")      params.set("a", access);
     if (sortKey !== "name" || sortDir !== "asc") {
       params.set("sort", `${sortKey}:${sortDir}`);
     }
-    if (openName) params.set("open", openName);
+    if (openId) params.set("game", openId);
 
     const qs = params.toString();
     const url = qs ? `?${qs}` : location.pathname;
@@ -183,10 +198,10 @@
   // === Фильтрация ===
   function getFiltered() {
     const q  = searchInput.value.toLowerCase().trim();
-    const d  = diffSelect.value;
+    const d  = chipValue(diffChips)    || "any";
     const g  = genreSel.value;
-    const p  = parseInt(playersSel.value, 10) || 0;
-    const a  = accessSel.value;
+    const p  = parseInt(chipValue(playersChips), 10) || 0;
+    const a  = chipValue(accessChips)  || "all";
 
     let dMin = 0, dMax = 5;
     if (d !== "any") {
@@ -217,8 +232,8 @@
   function render() {
     const filtered = getFiltered();
 
-    if (openName && !filtered.some(g => g.name === openName)) {
-      openName = null;
+    if (openId && !filtered.some(g => g.id === openId)) {
+      openId = null;
     }
 
     tbody.innerHTML = filtered.map((game, i) => {
@@ -231,7 +246,7 @@
       const hasExp  = game.expansions && game.expansions.length > 0;
       const hasData = hasDesc || hasExp;
 
-      const isOpen = game.name === openName;
+      const isOpen = game.id === openId;
 
       // Миниатюра обложки в строке
       const coverHtml = game.bggId
@@ -301,6 +316,7 @@
       return `
         <tr class="game-row ${isOpen ? "is-open" : ""}"
             data-index="${i}"
+            data-id="${esc(game.id)}"
             data-name="${esc(game.name)}"
             ${rowAttrs}>
           <td class="col-num">${i + 1}</td>
@@ -353,12 +369,12 @@
 
   // === Раскрытие ===
   function toggleRow(row) {
-    const name = row.dataset.name;
-    if (!name) return;
+    const id = row.dataset.id;
+    if (!id) return;
     if (row.getAttribute("aria-disabled") === "true") return;
 
-    if (openName === name) {
-      openName = null;
+    if (openId === id) {
+      openId = null;
       row.classList.remove("is-open");
       row.setAttribute("aria-expanded", "false");
       const panel = row.nextElementSibling;
@@ -366,7 +382,7 @@
         panel.querySelector(".expansion-content")?.classList.remove("open");
       }
     } else {
-      if (openName) {
+      if (openId) {
         const prev = tbody.querySelector(".game-row.is-open");
         if (prev) {
           prev.classList.remove("is-open");
@@ -377,7 +393,7 @@
           }
         }
       }
-      openName = name;
+      openId = id;
       row.classList.add("is-open");
       row.setAttribute("aria-expanded", "true");
       const panel = row.nextElementSibling;
@@ -408,10 +424,16 @@
   // === Фильтры ===
   const onFilterChange = debounce(render, 150);
   searchInput.addEventListener("input", onFilterChange);
-  diffSelect.addEventListener("change", render);
+  // Один обработчик на все группы чипов — делегирование
+  [diffChips, playersChips, accessChips].forEach(group => {
+    group?.addEventListener("click", (e) => {
+      const chip = e.target.closest(".chip");
+      if (!chip) return;
+      setChipValue(group, chip.dataset.value);
+      render();
+    });
+  });
   genreSel.addEventListener("change", render);
-  playersSel.addEventListener("change", render);
-  accessSel.addEventListener("change", render);
 
   // Enter в поиске: применить фильтры сразу и не перезагружать страницу
   const filtersForm = $("#filters");
@@ -424,13 +446,13 @@
   // === Сброс ===
   function resetFilters() {
     searchInput.value = "";
-    diffSelect.value = "any";
+    setChipValue(diffChips, "any");
     genreSel.value = "";
-    playersSel.value = "0";
-    accessSel.value = "all";
+    setChipValue(playersChips, "0");
+    setChipValue(accessChips, "all");
     sortKey = "name";
     sortDir = "asc";
-    openName = null;
+    openId = null;
     render();
     searchInput.focus();
   }

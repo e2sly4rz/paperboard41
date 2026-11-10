@@ -55,15 +55,15 @@
       </div>
 
       <div class="control">
-        <label for="filter-difficulty">Сложность:</label>
-        <select id="filter-difficulty">
-          <option value="any">Любая</option>
-          <option value="0.5-1">до 1 (очень просто)</option>
-          <option value="1-2">1–2 (просто)</option>
-          <option value="2-3">2–3 (средне)</option>
-          <option value="3-4">3–4 (сложно)</option>
-          <option value="4-5">4–5 (хардкор)</option>
-        </select>
+        <label>Сложность:</label>
+        <div class="chips" id="filter-difficulty" role="radiogroup" aria-label="Сложность">
+          <button type="button" class="chip is-active" data-value="any">Любая</button>
+          <button type="button" class="chip" data-value="0.5-1">до 1</button>
+          <button type="button" class="chip" data-value="1-2">1–2</button>
+          <button type="button" class="chip" data-value="2-3">2–3</button>
+          <button type="button" class="chip" data-value="3-4">3–4</button>
+          <button type="button" class="chip" data-value="4-5">4–5</button>
+        </div>
       </div>
 
       <div class="control">
@@ -74,25 +74,25 @@
       </div>
 
       <div class="control">
-        <label for="filter-players">Игроки:</label>
-        <select id="filter-players">
-          <option value="0">Любое</option>
-          <option value="1">1+</option>
-          <option value="2">2+</option>
-          <option value="3">3+</option>
-          <option value="4">4+</option>
-          <option value="5">5+</option>
-          <option value="6">6+</option>
-        </select>
+        <label>Игроки:</label>
+        <div class="chips" id="filter-players" role="radiogroup" aria-label="Игроки">
+          <button type="button" class="chip is-active" data-value="0">Любое</button>
+          <button type="button" class="chip" data-value="1">1+</button>
+          <button type="button" class="chip" data-value="2">2+</button>
+          <button type="button" class="chip" data-value="3">3+</button>
+          <button type="button" class="chip" data-value="4">4+</button>
+          <button type="button" class="chip" data-value="5">5+</button>
+          <button type="button" class="chip" data-value="6">6+</button>
+        </div>
       </div>
 
       <div class="control">
-        <label for="filter-access">Доступ:</label>
-        <select id="filter-access">
-          <option value="all">Любой</option>
-          <option value="yes">Только особый вагон</option>
-          <option value="no">Только обычные</option>
-        </select>
+        <label>Доступ:</label>
+        <div class="chips" id="filter-access" role="radiogroup" aria-label="Доступ">
+          <button type="button" class="chip is-active" data-value="all">Любой</button>
+          <button type="button" class="chip" data-value="yes">🔒 особый</button>
+          <button type="button" class="chip" data-value="no">обычные</button>
+        </div>
       </div>
 
       <button type="button" class="reset-btn" id="reset">Сбросить</button>

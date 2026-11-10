@@ -161,6 +161,40 @@ h2 {
   margin-bottom: 10px;
 }
 
+/* === Чипы-фильтры === */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.chip {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 13px;
+  padding: 4px 10px;
+  background: var(--paper-dark);
+  border: 1px solid var(--border);
+  color: var(--ink-soft);
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+  white-space: nowrap;
+}
+.chip:hover {
+  background: var(--row-hover);
+  color: var(--ink);
+}
+.chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.chip.is-active {
+  background: var(--accent);
+  border-color: var(--accent-hover);
+  color: #fff;
+  font-weight: bold;
+}
+
 /* === Таблица === */
 .table-wrap {
   position: relative;
@@ -208,7 +242,6 @@ h2 {
   white-space: normal;
 }
 
-/* Flex-раскладка: обложка + текст в своей колонке */
 .name-flex {
   display: flex;
   align-items: flex-start;
@@ -217,7 +250,7 @@ h2 {
 
 .name-text {
   flex: 1 1 auto;
-  min-width: 0;              /* не даём flex распирать длинным словом */
+  min-width: 0;
   overflow-wrap: anywhere;
   word-break: normal;
   line-height: 1.35;
@@ -367,7 +400,6 @@ h2 {
   border: 1px solid var(--border);
   background: var(--paper);
 
-  /* Плавное появление */
   opacity: 0;
   transition: opacity .3s ease;
 }
@@ -566,11 +598,6 @@ h2 {
     width: 32px;
     height: 32px;
   }
-
-  .name-flex {
-    gap: 6px;
-  }
-
   .cover-fallback {
     font-size: 12px;
   }
@@ -589,9 +616,16 @@ h2 {
   }
 
   .bgg-link { font-size: 14px; }
+  .name-flex { gap: 6px; }
+
+  /* Чипы на мобиле — крупнее */
+  .chip {
+    font-size: 14px;
+    padding: 6px 12px;
+  }
 }
 
-/* Очень узкие экраны: скрываем крупную обложку, чтобы текст не сжимался */
+/* Очень узкие экраны */
 @media (max-width: 380px) {
   .expansion-body.has-cover {
     grid-template-columns: 1fr;
@@ -609,5 +643,6 @@ h2 {
   .catalog-table,
   .controls input,
   .controls select,
-  h2 { transition: none; }
+  h2,
+  .chip { transition: none; }
 }
