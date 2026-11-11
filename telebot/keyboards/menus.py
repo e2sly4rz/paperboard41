@@ -12,13 +12,6 @@ def _fmt_date(iso_date: str) -> str:
     except (ValueError, TypeError):
         return iso_date or "—"
 
-
-def _short_title(title: str, max_len: int = 28) -> str:
-    if len(title) <= max_len:
-        return title
-    return title[:max_len - 1].rstrip() + "…"
-
-
 def main_menu(is_host: bool, user_id: int | None = None) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.button(text="📅 Расписание", callback_data="schedule")
@@ -52,40 +45,6 @@ def nights_list(nights: list[dict]) -> InlineKeyboardMarkup:
     kb.button(text="⬅️ Назад", callback_data="back_main")
     kb.adjust(1)
     return kb.as_markup()
-
-
-def sessions_list(night_id: int, sessions: list[dict]) -> InlineKeyboardMarkup:
-    kb = InlineKeyboardBuilder()
-    for s in sessions:
-        taken = s["max_slots"] - s["free_slots"]
-        total = s["max_slots"]
-
-        if total <= 0:
-            fill_pct = 0
-        else:
-            fill_pct = taken / total
-
-        if fill_pct >= 1.0:
-            marker = "⛔ "
-        elif fill_pct >= 0.76:
-            marker = "🔴 "
-        elif fill_pct >= 0.51:
-            marker = "🟠 "
-        elif fill_pct >= 0.26:
-            marker = "🟡 "
-        else:
-            marker = "🟢 "
-
-        title = _short_title(s["title"])
-        kb.button(
-            text=f"{marker}{s['time_start']} · {title} · {taken}/{total}",
-            callback_data=f"session:{s['id']}",
-        )
-
-    kb.button(text="⬅️ К расписанию", callback_data="schedule")
-    kb.adjust(1)
-    return kb.as_markup()
-
 
 def session_card(session_id: int, night_id: int,
                  can_register: bool) -> InlineKeyboardMarkup:

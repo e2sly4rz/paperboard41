@@ -1,6 +1,6 @@
 from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery
+from aiogram.types import CallbackQuery, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from database.db import db
@@ -19,7 +19,6 @@ from database.queries import (
 )
 from keyboards.menus import (
     nights_list,
-    sessions_list,
     session_card,
     main_menu,
     poll_time_grid,
@@ -30,6 +29,12 @@ from utils import is_host_or_admin, fmt_date, safe_edit
 from notifications import notify_game_author_registration
 
 router = Router()
+
+
+def _time_range(s: dict) -> str:
+    if s.get("time_end"):
+        return f"{s['time_start']}–{s['time_end']}"
+    return s["time_start"]
 
 
 @router.callback_query(F.data == "schedule")
@@ -67,42 +72,66 @@ async def show_night(call: CallbackQuery) -> None:
 
     free_label = "🆓 Бесплатная игротека" if night["is_free"] else "💰 Платная игротека"
 
-    header = (
-        f"🎲 <b>Игротека {fmt_date(night['date'])}</b>\n"
-        f"{free_label}\n"
-        f"📍 {night['location']}\n"
-        f"Игр: {night['sessions_count']} • Записей: {night['total_taken']}"
-    )
+    lines = [
+        f"🎲 <b>Игротека {fmt_date(night['date'])}</b>",
+        free_label,
+        f"📍 {night['location']}",
+        f"Игр: {night['sessions_count']} • Записей: {night['total_taken']}",
+    ]
     if not can:
-        header += f"\n\n🔒 {reason}"
+        lines.append(f"\n🔒 {reason}")
     if poll:
-        header += "\n\n📊 Хост собирает удобное время для игр."
-    if not sessions:
-        header += "\n\n<i>В этой игротеке пока нет игр.</i>"
+        lines.append("\n📊 Хост собирает удобное время для игр.")
 
-    # Кнопки: опрос (если есть) + сессии (если есть) + назад
+    if not sessions:
+        lines.append("\n<i>В этой игротеке пока нет игр.</i>")
+    else:
+        lines.append("")
+        for i, s in enumerate(sessions, 1):
+            time_range = _time_range(s)
+            title = s["title"]
+            taken = s["max_slots"] - s["free_slots"]
+
+            markers = ""
+            if s.get("is_subscriber_only"):
+                markers += " 🔒"
+            if s["free_slots"] <= 0:
+                markers += " ⛔"
+
+            padding = " " if i < 10 else ""
+            lines.append(f"{padding}{i}. <b>{time_range}</b>")
+            lines.append(f" {title} · {taken}/{s['max_slots']}{markers}")
+            if i < len(sessions):
+                lines.append("")
+
+    text = "\n".join(lines)
+    if len(text) > 3900:
+        text = text[:3890] + "\n\n<i>…список обрезан</i>"
+
     builder = InlineKeyboardBuilder()
+    if sessions:
+        for i, s in enumerate(sessions, 1):
+            builder.button(text=str(i), callback_data=f"session:{s['id']}")
+        builder.adjust(5)
+
     if poll:
-        builder.button(
+        builder.row(InlineKeyboardButton(
             text="⏰ Указать удобное время",
             callback_data=f"poll_answer:{night_id}",
-        )
-        builder.button(
+        ))
+        builder.row(InlineKeyboardButton(
             text="❌ Не смогу прийти",
             callback_data=f"poll_unavailable_notify:{night_id}",
-        )
-    if sessions:
-        sessions_kb = sessions_list(night_id, sessions)
-        for row in sessions_kb.inline_keyboard:
-            for btn in row:
-                builder.button(text=btn.text, callback_data=btn.callback_data)
-    else:
-        builder.button(text="⬅️ К расписанию", callback_data="schedule")
-    builder.adjust(1)
+        ))
+
+    builder.row(InlineKeyboardButton(
+        text="⬅️ К расписанию",
+        callback_data="schedule",
+    ))
 
     await safe_edit(
         call.message,
-        header,
+        text,
         parse_mode="HTML",
         reply_markup=builder.as_markup(),
     )
