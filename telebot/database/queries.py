@@ -557,7 +557,7 @@ async def can_passengers_register_early(night_id: int) -> bool:
     ) as cur:
         available_provodniks = [row["telegram_id"] for row in await cur.fetchall()]
 
-    poll = await get_active_poll_for_night(night_id)
+    poll = await get_last_poll_for_night(night_id)
     responses_by_user: dict[int, dict] = {}
     if poll:
         async with db.conn.execute(
@@ -985,6 +985,22 @@ async def get_active_poll_for_night(night_id: int) -> dict | None:
     async with db.conn.execute(
         """SELECT * FROM availability_polls
            WHERE game_night_id = ? AND status = 'open'
+           ORDER BY id DESC LIMIT 1""",
+        (night_id,),
+    ) as cur:
+        row = await cur.fetchone()
+        return dict(row) if row else None
+
+async def get_last_poll_for_night(night_id: int) -> dict | None:
+    """Последний опрос ночи — открытый или закрытый.
+
+    Используется для правила «проводники закончились»: ответы
+    последнего опроса считаются актуальными, даже если опрос
+    уже закрыт.
+    """
+    async with db.conn.execute(
+        """SELECT * FROM availability_polls
+           WHERE game_night_id = ?
            ORDER BY id DESC LIMIT 1""",
         (night_id,),
     ) as cur:
