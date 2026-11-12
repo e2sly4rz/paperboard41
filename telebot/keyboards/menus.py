@@ -34,11 +34,11 @@ def admin_help_back() -> InlineKeyboardMarkup:
 def nights_list(nights: list[dict]) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for n in nights:
-        status = "🔓" if n.get("registration_open") else "🔒"
-        # NEW: маркер платности
+        # NEW: 🔒 только для закрытой, в начале
+        lock = "🔒 " if not n.get("registration_open") else ""
         free_marker = "🆓" if n.get("is_free") else "💰"
         kb.button(
-            text=f"{free_marker}{status} {_fmt_date(n['date'])} • {n['location']} "
+            text=f"{lock}{free_marker} {_fmt_date(n['date'])} • {n['location']} "
                  f"(игр: {n['sessions_count']})",
             callback_data=f"night:{n['id']}",
         )

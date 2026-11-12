@@ -79,7 +79,7 @@ async def show_night(call: CallbackQuery) -> None:
         f"Игр: {night['sessions_count']} • Записей: {night['total_taken']}",
     ]
     if not can:
-        lines.append(f"\n🔒 {reason}")
+        lines.append(f"\nℹ️ {reason}")
     if poll:
         lines.append("\n📊 Хост собирает удобное время для игр.")
 
@@ -94,7 +94,7 @@ async def show_night(call: CallbackQuery) -> None:
 
             markers = ""
             if s.get("is_subscriber_only"):
-                markers += " 🔒"
+                markers += " ⭐"
             if s["free_slots"] <= 0:
                 markers += " ⛔"
 
@@ -196,7 +196,7 @@ async def show_session(call: CallbackQuery) -> None:
         f"Занято мест: {taken} из {s['max_slots']}\n"
     )
     if s["is_subscriber_only"]:
-        text += "\n🔒 Только для подписчиков «Проводник»."
+        text += "\n⭐ Только для подписчиков «Проводник»."
 
     await safe_edit(
         call.message,
