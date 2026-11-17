@@ -1,6 +1,7 @@
 ﻿# resizer.ps1
 # Converts PNG/JPG/JPEG from covers\ to WebP 200x200 in covers_webp\
 # Non-square images are padded to square with TRANSPARENT background.
+# Skips files that already exist in covers_webp\.
 
 $ErrorActionPreference = "Stop"
 
@@ -30,12 +31,20 @@ if ($files.Count -eq 0) {
 
 Write-Host "Found files: $($files.Count)"
 
-$count = 0
-$failed = 0
+$count   = 0
+$skipped = 0
+$failed  = 0
 
 foreach ($f in $files) {
     $name = [System.IO.Path]::GetFileNameWithoutExtension($f.Name)
     $out  = Join-Path $DST "$name.webp"
+
+    # Skip if already converted
+    if (Test-Path $out) {
+        $skipped++
+        Write-Host "  SKIP $($f.Name) (already exists)"
+        continue
+    }
 
     # >  = fit inside 200x200 keeping aspect (no crop)
     # -background none + -extent = pad to square with TRANSPARENT
@@ -63,4 +72,4 @@ foreach ($f in $files) {
 }
 
 Write-Host ""
-Write-Host "Done: $count files -> $DST, errors: $failed"
+Write-Host "Done: converted $count, skipped $skipped, errors $failed -> $DST"
