@@ -34,7 +34,7 @@ async def cmd_start(message: Message) -> None:
             f"Вы администратор клуба «{CLUB_NAME}».\n"
             f"Заявок на доступ: <b>{len(pending)}</b>\n\n"
             f"Список команд — в разделе «❓ Справка по командам».",
-            reply_markup=main_menu(True, u.id),
+            reply_markup=main_menu(True, u.id, is_provodnik=True),
         )
         return
 
@@ -77,7 +77,7 @@ async def cmd_start(message: Message) -> None:
             f"можно создавать игротеки, управлять играми "
             f"и смотреть участников.\n\n"
             f"А в «📅 Расписание» — записаться на игры других хостов.",
-            reply_markup=main_menu(True, u.id),
+            reply_markup=main_menu(True, u.id, is_provodnik=True),
         )
         return
 
@@ -88,7 +88,7 @@ async def cmd_start(message: Message) -> None:
             f"Вы — гость клуба. Можете записываться на бесплатные "
             f"игротеки (отмечены 🆓 в расписании).\n\n"
             f"Для доступа к платным играм обратитесь к организатору.",
-            reply_markup=main_menu(False, u.id),
+            reply_markup=main_menu(False, u.id, is_provodnik=False),
         )
         return
 
@@ -104,7 +104,7 @@ async def cmd_start(message: Message) -> None:
         f"Это бот клуба настольных игр «{CLUB_NAME}».\n\n"
         f"Здесь можно посмотреть расписание игротек "
         f"и записаться на игры.{provodnik_note}",
-        reply_markup=main_menu(False, u.id),
+        reply_markup=main_menu(False, u.id, is_provodnik=is_provodnik),
     )
 
 
@@ -115,10 +115,14 @@ async def back_main(call: CallbackQuery) -> None:
         bool(user and user["subscriber_level"] == "host")
         or is_admin(call.from_user.id)
     )
+    is_provodnik = bool(
+        user and user["subscriber_level"] in ("provodnik", "host")
+    ) or is_admin(call.from_user.id)
     await safe_edit(
         call.message,
         "Главное меню:",
-        reply_markup=main_menu(is_host_user, call.from_user.id),
+        reply_markup=main_menu(is_host_user, call.from_user.id,
+                               is_provodnik=is_provodnik),
     )
     await call.answer()
 

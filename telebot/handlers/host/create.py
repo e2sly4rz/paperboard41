@@ -506,7 +506,7 @@ async def host_finish(call: CallbackQuery, state: FSMContext) -> None:
     await safe_edit(
         call.message,
         "Игротека не создана: не указаны дата и место.",
-        reply_markup=main_menu(is_host_user, call.from_user.id),
+        reply_markup=main_menu(is_host_user, call.from_user.id, is_provodnik=True),
     )
     await call.answer()
 
@@ -518,6 +518,6 @@ async def host_cancel(call: CallbackQuery, state: FSMContext) -> None:
     await safe_edit(
         call.message,
         "Создание игротеки отменено.",
-        reply_markup=main_menu(is_host_user, call.from_user.id),
+        reply_markup=main_menu(is_host_user, call.from_user.id, is_provodnik=True),
     )
     await call.answer()

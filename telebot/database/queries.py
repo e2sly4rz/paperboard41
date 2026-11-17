@@ -430,13 +430,11 @@ async def can_register_for_night(
     if user_id == ADMIN_ID or level == "host":
         return True, ""
 
-    # NEW: бесплатная игротека — всем уровням сразу после открытия
     if night["is_free"]:
         if not night["registration_open"]:
             return False, "Запись на эту игротеку ещё не открыта."
         return True, ""
 
-    # NEW: гость не может на платную
     if level == "guest":
         return (
             False,
@@ -617,7 +615,6 @@ async def get_nights_for_passenger_notification() -> list[dict]:
     now = club_now()
 
     for n in nights:
-        # NEW: бесплатная игротека — уведомляем сразу
         if n["is_free"]:
             result.append({**n, "early": True})
             continue
@@ -691,7 +688,6 @@ async def register_for_session(session_id: int, user_id: int) -> tuple[bool, str
             await db.conn.rollback()
             return False, "Эта игра доступна только подписчикам уровня «Проводник»."
 
-        # CHANGED: registration_min_level не применяется на бесплатных
         if (not row["is_free"]
                 and row["registration_min_level"] == "provodnik"
                 and row["subscriber_level"] == "passenger"):
@@ -991,13 +987,8 @@ async def get_active_poll_for_night(night_id: int) -> dict | None:
         row = await cur.fetchone()
         return dict(row) if row else None
 
-async def get_last_poll_for_night(night_id: int) -> dict | None:
-    """Последний опрос ночи — открытый или закрытый.
 
-    Используется для правила «проводники закончились»: ответы
-    последнего опроса считаются актуальными, даже если опрос
-    уже закрыт.
-    """
+async def get_last_poll_for_night(night_id: int) -> dict | None:
     async with db.conn.execute(
         """SELECT * FROM availability_polls
            WHERE game_night_id = ?
@@ -1080,7 +1071,6 @@ async def get_users_for_poll_notification(night_id: int) -> list[dict]:
     host_id = night["host_telegram_id"] or 0
 
     if night["is_free"]:
-        # Бесплатная игротека — все, кроме хоста ночи
         query = """SELECT u.telegram_id, u.first_name, u.username, u.subscriber_level
                    FROM users u
                    WHERE u.is_approved = 1
@@ -1088,7 +1078,6 @@ async def get_users_for_poll_notification(night_id: int) -> list[dict]:
                    ORDER BY u.subscriber_level, u.first_name"""
         params = (host_id,)
     else:
-        # Платная игротека — все, кроме хоста ночи и гостей
         query = """SELECT u.telegram_id, u.first_name, u.username, u.subscriber_level
                    FROM users u
                    WHERE u.is_approved = 1
@@ -1125,3 +1114,127 @@ async def list_all_users_grouped() -> dict:
             if level in groups:
                 groups[level].append(r)
     return groups
+
+
+# ---------- Вишлист ----------
+
+WISHLIST_LIMIT = 5
+
+
+async def count_active_wishlist(user_id: int) -> int:
+    async with db.conn.execute(
+        "SELECT COUNT(*) FROM wishlist_items "
+        "WHERE user_id = ? AND status = 'active'",
+        (user_id,),
+    ) as cur:
+        row = await cur.fetchone()
+        return row[0] if row else 0
+
+
+async def wishlist_has_game(user_id: int, game_id: int) -> bool:
+    async with db.conn.execute(
+        "SELECT 1 FROM wishlist_items "
+        "WHERE user_id = ? AND game_id = ? AND status = 'active' LIMIT 1",
+        (user_id, game_id),
+    ) as cur:
+        return await cur.fetchone() is not None
+
+
+async def add_wishlist_item(user_id: int, game_id: int) -> int | None:
+    """Добавляет игру в вишлист. Возвращает id или None (лимит/дубль)."""
+    if await count_active_wishlist(user_id) >= WISHLIST_LIMIT:
+        return None
+    if await wishlist_has_game(user_id, game_id):
+        return None
+    cur = await db.conn.execute(
+        "INSERT INTO wishlist_items (user_id, game_id, status) "
+        "VALUES (?, ?, 'active')",
+        (user_id, game_id),
+    )
+    await db.conn.commit()
+    return cur.lastrowid
+
+
+async def list_user_wishlist(user_id: int, status: str = "active") -> list[dict]:
+    async with db.conn.execute(
+        """SELECT w.id, w.game_id, w.status, w.created_at,
+                  g.title, g.genre, g.min_players, g.max_players
+           FROM wishlist_items w
+           JOIN games g ON g.id = w.game_id
+           WHERE w.user_id = ? AND w.status = ?
+           ORDER BY w.created_at DESC""",
+        (user_id, status),
+    ) as cur:
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def remove_wishlist_item(item_id: int, user_id: int) -> bool:
+    cur = await db.conn.execute(
+        """UPDATE wishlist_items
+           SET status = 'removed', closed_at = CURRENT_TIMESTAMP,
+               closed_by = ?, close_reason = 'self'
+           WHERE id = ? AND user_id = ? AND status = 'active'""",
+        (user_id, item_id, user_id),
+    )
+    await db.conn.commit()
+    return cur.rowcount > 0
+
+
+async def close_wishlist_item(item_id: int, closed_by: int,
+                              reason: str) -> dict | None:
+    async with db.conn.execute(
+        """SELECT w.user_id, w.game_id, g.title
+           FROM wishlist_items w
+           JOIN games g ON g.id = w.game_id
+           WHERE w.id = ? AND w.status = 'active'""",
+        (item_id,),
+    ) as cur:
+        row = await cur.fetchone()
+    if not row:
+        return None
+
+    new_status = "fulfilled" if reason == "played" else "removed"
+    await db.conn.execute(
+        """UPDATE wishlist_items
+           SET status = ?, closed_at = CURRENT_TIMESTAMP,
+               closed_by = ?, close_reason = ?
+           WHERE id = ?""",
+        (new_status, closed_by, reason, item_id),
+    )
+    await db.conn.commit()
+    return {
+        "user_id": row["user_id"],
+        "game_id": row["game_id"],
+        "game_title": row["title"],
+        "reason": reason,
+    }
+
+
+async def list_all_wishlists() -> list[dict]:
+    async with db.conn.execute(
+        """SELECT w.id, w.user_id, w.game_id,
+                  g.title, g.genre,
+                  u.first_name, u.last_name, u.username,
+                  u.subscriber_level
+           FROM wishlist_items w
+           JOIN games g ON g.id = w.game_id
+           JOIN users u ON u.telegram_id = w.user_id
+           WHERE w.status = 'active'
+           ORDER BY u.first_name, g.title"""
+    ) as cur:
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def wishlist_summary() -> list[dict]:
+    async with db.conn.execute(
+        """SELECT w.game_id, g.title,
+                  COUNT(*) AS cnt,
+                  GROUP_CONCAT(u.first_name, ', ') AS names
+           FROM wishlist_items w
+           JOIN games g ON g.id = w.game_id
+           JOIN users u ON u.telegram_id = w.user_id
+           WHERE w.status = 'active'
+           GROUP BY w.game_id
+           ORDER BY cnt DESC, g.title"""
+    ) as cur:
+        return [dict(r) for r in await cur.fetchall()]

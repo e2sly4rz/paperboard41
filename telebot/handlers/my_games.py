@@ -17,11 +17,14 @@ router = Router()
 async def show_my_games(call: CallbackQuery) -> None:
     regs = await list_user_registrations(call.from_user.id)
     is_host_user = await is_host_or_admin(call.from_user.id)
+    user = await get_user(call.from_user.id)
+    is_provodnik = bool(user and user["subscriber_level"] in ("provodnik", "host"))
     if not regs:
         await safe_edit(
             call.message,
             "У вас пока нет активных записей.",
-            reply_markup=main_menu(is_host_user, call.from_user.id),
+            reply_markup=main_menu(is_host_user, call.from_user.id,
+                                   is_provodnik=is_provodnik),
         )
         await call.answer()
         return
@@ -69,12 +72,15 @@ async def cancel(call: CallbackQuery) -> None:
 
     # Обновляем экран «Мои записи»
     is_host_user = await is_host_or_admin(call.from_user.id)
+    user = await get_user(call.from_user.id)
+    is_provodnik = bool(user and user["subscriber_level"] in ("provodnik", "host"))
     regs = await list_user_registrations(call.from_user.id)
     if not regs:
         await safe_edit(
             call.message,
             "У вас пока нет активных записей.",
-            reply_markup=main_menu(is_host_user, call.from_user.id),
+            reply_markup=main_menu(is_host_user, call.from_user.id,
+                                   is_provodnik=is_provodnik),
         )
     else:
         await safe_edit(

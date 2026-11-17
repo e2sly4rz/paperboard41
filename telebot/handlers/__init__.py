@@ -1,6 +1,6 @@
 from aiogram import Router
 
-from . import start, schedule, my_games, host
+from . import start, schedule, my_games, wishlist, host
 
 
 def setup_routers() -> Router:
@@ -8,5 +8,6 @@ def setup_routers() -> Router:
     router.include_router(start.router)
     router.include_router(schedule.router)
     router.include_router(my_games.router)
+    router.include_router(wishlist.router)  # NEW
     router.include_router(host.router)
     return router

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from config import ADMIN_ID
@@ -12,10 +12,14 @@ def _fmt_date(iso_date: str) -> str:
     except (ValueError, TypeError):
         return iso_date or "—"
 
-def main_menu(is_host: bool, user_id: int | None = None) -> InlineKeyboardMarkup:
+
+def main_menu(is_host: bool, user_id: int | None = None,
+              is_provodnik: bool = False) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.button(text="📅 Расписание", callback_data="schedule")
     kb.button(text="🎲 Мои записи", callback_data="my_games")
+    if is_provodnik or is_host:
+        kb.button(text="⭐ Вишлист", callback_data="wishlist")
     if is_host:
         kb.button(text="🎩 Меню организатора", callback_data="host_menu")
     if user_id is not None and user_id == ADMIN_ID:
@@ -34,7 +38,6 @@ def admin_help_back() -> InlineKeyboardMarkup:
 def nights_list(nights: list[dict]) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for n in nights:
-        # NEW: 🔒 только для закрытой, в начале
         lock = "🔒 " if not n.get("registration_open") else ""
         free_marker = "🆓" if n.get("is_free") else "💰"
         kb.button(
@@ -45,6 +48,7 @@ def nights_list(nights: list[dict]) -> InlineKeyboardMarkup:
     kb.button(text="⬅️ Назад", callback_data="back_main")
     kb.adjust(1)
     return kb.as_markup()
+
 
 def session_card(session_id: int, night_id: int,
                  can_register: bool) -> InlineKeyboardMarkup:
@@ -75,11 +79,12 @@ def host_menu_with_nights(nights: list[dict],
     kb = InlineKeyboardBuilder()
     kb.button(text="➕ Создать игротеку", callback_data="host_create")
     kb.button(text="📚 Добавить игру в каталог", callback_data="host_add_game")
+    # NEW: вишлисты проводников
+    kb.button(text="⭐ Вишлисты проводников", callback_data="host_wishlists")
 
     for n in nights:
         is_own = own_ids is None or n["id"] in own_ids
         prefix = "🎩" if is_own else "👀"
-        # NEW: маркер платности
         free_marker = "🆓" if n.get("is_free") else "💰"
         kb.button(
             text=f"{free_marker}{prefix} {_fmt_date(n['date'])} • {n['location']} "
@@ -96,6 +101,8 @@ def host_menu_empty() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.button(text="➕ Создать игротеку", callback_data="host_create")
     kb.button(text="📚 Добавить игру в каталог", callback_data="host_add_game")
+    # NEW: вишлисты проводников
+    kb.button(text="⭐ Вишлисты проводников", callback_data="host_wishlists")
     kb.button(text="⬅️ Назад", callback_data="back_main")
     kb.adjust(1)
     return kb.as_markup()
@@ -291,14 +298,9 @@ def poll_time_grid(prefix: str, start_hour: int = 10,
     for hour in range(start_hour, end_hour + 1):
         t = f"{hour:02d}:00"
         kb.button(text=t, callback_data=f"{prefix}:{t}")
+    kb.button(text="❌ Не смогу прийти", callback_data="poll_unavailable")
+    kb.button(text="⬅️ Отмена", callback_data="back_main")
     kb.adjust(4)
-
-    kb.row(InlineKeyboardButton(
-        text="❌ Не смогу прийти", callback_data="poll_unavailable"
-    ))
-    kb.row(InlineKeyboardButton(
-        text="⬅️ Отмена", callback_data="back_main"
-    ))
     return kb.as_markup()
 
 
@@ -310,9 +312,62 @@ def poll_time_grid_after(prefix: str, after: str,
     for hour in range(max(start_hour, after_h + 1), end_hour + 1):
         t = f"{hour:02d}:00"
         kb.button(text=t, callback_data=f"{prefix}:{t}")
+    kb.button(text="❌ Отмена", callback_data="back_main")
     kb.adjust(4)
+    return kb.as_markup()
 
-    kb.row(InlineKeyboardButton(
-        text="❌ Отмена", callback_data="back_main"
-    ))
+
+# ---------- Вишлист ----------
+
+def wishlist_view(items: list[dict], is_full: bool,
+                  show_summary: bool = True) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    if not is_full:
+        kb.button(text="➕ Добавить игру", callback_data="wishlist_add")
+    for item in items:
+        kb.button(
+            text=f"🗑 {item['title']}",
+            callback_data=f"wishlist_remove:{item['id']}",
+        )
+    if show_summary:
+        kb.button(text="📊 Сводка", callback_data="wishlist_summary")
+    kb.button(text="⬅️ Назад", callback_data="back_main")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def wishlist_search_results(games: list[dict]) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    for g in games:
+        kb.button(
+            text=g["title"],
+            callback_data=f"wishlist_pick:{g['id']}",
+        )
+    kb.button(text="🔍 Искать снова", callback_data="wishlist_add")
+    kb.button(text="❌ Отмена", callback_data="wishlist")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def host_wishlists(items: list[dict]) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    for item in items:
+        name = item["first_name"] or "Без имени"
+        kb.button(
+            text=f"🗑 {name}: {item['title']}",
+            callback_data=f"host_wishlist_close:{item['id']}",
+        )
+    kb.button(text="⬅️ Назад", callback_data="host_menu")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def close_reason_picker(item_id: int) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(text="✅ Поиграл",
+              callback_data=f"wishlist_close:{item_id}:played")
+    kb.button(text="🚫 Неактуально",
+              callback_data=f"wishlist_close:{item_id}:irrelevant")
+    kb.button(text="⬅️ Отмена", callback_data="host_wishlists")
+    kb.adjust(1)
     return kb.as_markup()

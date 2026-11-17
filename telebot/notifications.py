@@ -339,3 +339,25 @@ async def notify_registration_opened(
         delay_seconds=1.0,
         reply_markup=reply_markup,
     )
+
+async def notify_wishlist_closed(
+    bot: Bot,
+    user_id: int,
+    *,
+    game_title: str,
+    reason: str,
+) -> None:
+    """Уведомляет проводника, что хост закрыл пункт вишлиста.
+
+    reason: 'played' | 'irrelevant' (расширяемо).
+    """
+    reason_text = {
+        "played": "поиграл",
+        "irrelevant": "неактуально",
+    }.get(reason, reason)
+
+    text = (
+        f"⭐ <b>Вишлист обновлён</b>\n\n"
+        f"Хост закрыл пункт «{game_title}»: {reason_text}."
+    )
+    await _safe_send(bot, user_id, text)

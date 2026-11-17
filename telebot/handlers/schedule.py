@@ -41,11 +41,14 @@ def _time_range(s: dict) -> str:
 async def show_schedule(call: CallbackQuery) -> None:
     nights = await list_upcoming_nights()
     is_host_user = await is_host_or_admin(call.from_user.id)
+    user = await get_user(call.from_user.id)
+    is_provodnik = bool(user and user["subscriber_level"] in ("provodnik", "host"))
     if not nights:
         await safe_edit(
             call.message,
             "Пока нет запланированных игротек.",
-            reply_markup=main_menu(is_host_user, call.from_user.id),
+            reply_markup=main_menu(is_host_user, call.from_user.id,
+                                   is_provodnik=is_provodnik),
         )
         await call.answer()
         return
@@ -295,13 +298,17 @@ async def poll_unavailable(call: CallbackQuery, state: FSMContext) -> None:
     await mark_availability_unavailable(poll_id, call.from_user.id)
     await state.clear()
 
+    user = await get_user(call.from_user.id)
+    is_provodnik = bool(user and user["subscriber_level"] in ("provodnik", "host"))
+
     await safe_edit(
         call.message,
         "✅ <b>Отмечено: вы не сможете прийти.</b>\n\n"
         "Если передумаете — откройте опрос в карточке игротеки "
         "и укажите удобное время.",
         parse_mode="HTML",
-        reply_markup=main_menu(False, call.from_user.id),
+        reply_markup=main_menu(False, call.from_user.id,
+                               is_provodnik=is_provodnik),
     )
     await call.answer()
 
@@ -316,13 +323,17 @@ async def poll_unavailable_from_notify(call: CallbackQuery) -> None:
 
     await mark_availability_unavailable(poll["id"], call.from_user.id)
 
+    user = await get_user(call.from_user.id)
+    is_provodnik = bool(user and user["subscriber_level"] in ("provodnik", "host"))
+
     await safe_edit(
         call.message,
         "✅ <b>Отмечено: вы не сможете прийти.</b>\n\n"
         "Если передумаете — откройте опрос в карточке игротеки "
         "и укажите удобное время.",
         parse_mode="HTML",
-        reply_markup=main_menu(False, call.from_user.id),
+        reply_markup=main_menu(False, call.from_user.id,
+                               is_provodnik=is_provodnik),
     )
     await call.answer()
 
@@ -364,11 +375,15 @@ async def poll_pick_to(call: CallbackQuery, state: FSMContext) -> None:
     )
     await state.clear()
 
+    user = await get_user(call.from_user.id)
+    is_provodnik = bool(user and user["subscriber_level"] in ("provodnik", "host"))
+
     await safe_edit(
         call.message,
         f"✅ Ваше время: <b>{time_from}–{time_to}</b>\n\n"
         "Спасибо! Хост увидит ваш ответ.",
         parse_mode="HTML",
-        reply_markup=main_menu(False, call.from_user.id),
+        reply_markup=main_menu(False, call.from_user.id,
+                               is_provodnik=is_provodnik),
     )
     await call.answer()

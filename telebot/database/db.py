@@ -131,6 +131,21 @@ CREATE TABLE IF NOT EXISTS availability_responses (
     FOREIGN KEY (user_id) REFERENCES users(telegram_id)
 );
 
+-- NEW: вишлист
+CREATE TABLE IF NOT EXISTS wishlist_items (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id        INTEGER NOT NULL,
+    game_id        INTEGER NOT NULL,
+    status         TEXT NOT NULL DEFAULT 'active'
+        CHECK (status IN ('active', 'fulfilled', 'removed')),
+    created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    closed_at      TIMESTAMP,
+    closed_by      INTEGER,
+    close_reason   TEXT,
+    FOREIGN KEY (user_id) REFERENCES users(telegram_id),
+    FOREIGN KEY (game_id) REFERENCES games(id)
+);
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_session_user
     ON registrations(session_id, user_telegram_id);
 
@@ -145,6 +160,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_notif_unique
 
 CREATE INDEX IF NOT EXISTS idx_avail_poll
     ON availability_responses(poll_id);
+
+-- NEW: индексы вишлиста
+CREATE INDEX IF NOT EXISTS idx_wishlist_user
+    ON wishlist_items(user_id, status);
+
+CREATE INDEX IF NOT EXISTS idx_wishlist_game
+    ON wishlist_items(game_id, status);
 """
 
 
@@ -258,6 +280,9 @@ async def _run_migrations() -> None:
             "ALTER TABLE game_nights ADD COLUMN is_free "
             "INTEGER NOT NULL DEFAULT 0"
         )
+
+    # NEW: вишлист — таблица создаётся в SCHEMA (IF NOT EXISTS),
+    # отдельная миграция не нужна. Индексы — тоже в SCHEMA.
 
     await db.conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_sessions_created_by "
