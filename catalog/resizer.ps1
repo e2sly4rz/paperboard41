@@ -1,5 +1,5 @@
 ﻿# resizer.ps1
-# Converts PNG/JPG/JPEG from covers\ to WebP 200x200 in covers_webp\
+# Converts PNG/JPG/JPEG/WebP from covers\ to WebP 200x200 in covers_webp\
 # Non-square images are padded to square with TRANSPARENT background.
 # Skips files that already exist in covers_webp\.
 
@@ -22,10 +22,10 @@ if (-not (Test-Path $SRC)) {
 New-Item -ItemType Directory -Force -Path $DST | Out-Null
 
 $files = Get-ChildItem -Path $SRC -File |
-    Where-Object { $_.Extension -match '^\.(png|jpe?g)$' }
+    Where-Object { $_.Extension -match '^\.(png|jpe?g|webp)$' }
 
 if ($files.Count -eq 0) {
-    Write-Host "No PNG/JPG/JPEG files in '$SRC'." -ForegroundColor Yellow
+    Write-Host "No PNG/JPG/JPEG/WebP files in '$SRC'." -ForegroundColor Yellow
     exit 0
 }
 
