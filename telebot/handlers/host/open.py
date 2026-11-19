@@ -33,17 +33,21 @@ async def night_open(call: CallbackQuery) -> None:
         await call.answer("Не удалось открыть запись", show_alert=True)
         return
 
-    # NEW: для бесплатной — рассылка всем, кроме хостов;
-    # для платной — только Проводникам и хостам (как раньше).
+    # NEW: учитываем последний опрос — исключаем ответивших "unavailable"
+    last_poll = await get_last_poll_for_night(night_id)
+    exclude_poll_id = last_poll["id"] if last_poll else None
+
     if night["is_free"]:
         users = await get_users_for_registration_notification_by_levels(
-            night_id, ["passenger", "provodnik", "guest"]
+            night_id, ["passenger", "provodnik", "guest"],
+            exclude_unavailable_poll_id=exclude_poll_id,
         )
         target_level = "passenger"
         early = True
     else:
         users = await get_users_for_registration_notification_by_levels(
-            night_id, ["provodnik", "host"]
+            night_id, ["provodnik", "host"],
+            exclude_unavailable_poll_id=exclude_poll_id,
         )
         target_level = "provodnik"
         early = False
@@ -61,7 +65,7 @@ async def night_open(call: CallbackQuery) -> None:
     )
 
     night = await get_night(night_id)
-    poll = await get_active_poll_for_night(night_id)
+    poll = await get_last_poll_for_night(night_id)
 
     free_label = "🆓 Бесплатная" if night["is_free"] else "💰 Платная"
     text = (
@@ -80,7 +84,7 @@ async def night_open(call: CallbackQuery) -> None:
         reply_markup=host_night_card_with_poll(
             night_id,
             is_owner=True,
-            has_active_poll=bool(poll),
+            has_active_poll=bool(poll and poll["status"] == "open"),
             has_any_poll=bool(poll),
             registration_open=True,
         ),

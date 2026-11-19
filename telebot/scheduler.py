@@ -14,6 +14,7 @@ from database.queries import (
     log_day_notification,
     get_nights_for_passenger_notification,
     get_users_for_registration_notification_by_levels,
+    get_last_poll_for_night,
     mark_passenger_notified,
 )
 from notifications import notify_registration_opened
@@ -117,21 +118,21 @@ async def check_and_send_reminders(bot: Bot) -> None:
 
 
 async def check_passenger_registration_notifications(bot: Bot) -> None:
-    """Проверяет игротеки, где пассажирам уже можно записаться,
-    и отправляет им уведомление об открытии (один раз на игротеку).
-    """
     nights = await get_nights_for_passenger_notification()
 
     for night in nights:
-        # NEW: для бесплатной — пассажирам, проводникам и гостям, кроме хостов;
-        # для платной — как раньше (только пассажирам).
         if night.get("is_free"):
             levels = ["passenger", "provodnik", "guest"]
         else:
             levels = ["passenger"]
 
+        # NEW: исключаем ответивших unavailable в последнем опросе
+        last_poll = await get_last_poll_for_night(night["id"])
+        exclude_poll_id = last_poll["id"] if last_poll else None
+
         users = await get_users_for_registration_notification_by_levels(
-            night["id"], levels
+            night["id"], levels,
+            exclude_unavailable_poll_id=exclude_poll_id,
         )
         if not users:
             await mark_passenger_notified(night["id"])

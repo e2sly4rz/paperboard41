@@ -14,7 +14,7 @@ from database.queries import (
     add_session,
     delete_session,
     search_games,
-    get_active_poll_for_night,
+    get_last_poll_for_night,
     find_host_conflict,
 )
 from keyboards.menus import (
@@ -74,7 +74,7 @@ async def sessions_manage(call: CallbackQuery) -> None:
             return
 
     if not sessions:
-        poll = await get_active_poll_for_night(night_id)
+        poll = await get_last_poll_for_night(night_id)
         await call.message.edit_text(
             f"🎲 Игротека\n"
             f"Дата: {fmt_date(night['date'])}\n"
@@ -85,7 +85,7 @@ async def sessions_manage(call: CallbackQuery) -> None:
             reply_markup=host_night_card_with_poll(
                 night_id,
                 is_owner=can_manage,
-                has_active_poll=bool(poll),
+                has_active_poll=bool(poll and poll["status"] == "open"),
                 has_any_poll=bool(poll),
                 registration_open=bool(night["registration_open"]),
             ),
@@ -214,13 +214,13 @@ async def session_delete_confirm_yes(call: CallbackQuery) -> None:
     can_manage = await can_manage_night(call.from_user.id, night)
     sessions = await get_night_sessions_for_edit(night_id)
     if not sessions:
-        poll = await get_active_poll_for_night(night_id)
+        poll = await get_last_poll_for_night(night_id)
         await call.message.edit_text(
             "Все игры удалены. В игротеке больше нет сессий.",
             reply_markup=host_night_card_with_poll(
                 night_id,
                 is_owner=can_manage,
-                has_active_poll=bool(poll),
+                has_active_poll=bool(poll and poll["status"] == "open"),
                 has_any_poll=bool(poll),
                 registration_open=bool(night["registration_open"]),
             ),
@@ -251,7 +251,6 @@ async def _finalize_add_session(message, state: FSMContext,
         await message.answer("Игротека не найдена.")
         return
 
-    # Проверка: у хоста уже есть игра в это время в этот день?
     conflict = await find_host_conflict(
         user_id,
         night["date"],
@@ -304,14 +303,14 @@ async def _finalize_add_session(message, state: FSMContext,
             ),
         )
     else:
-        poll = await get_active_poll_for_night(night_id)
+        poll = await get_last_poll_for_night(night_id)
         await message.answer(
             f"✅ Игра «{game['title']}» добавлена в игротеку "
             f"{fmt_date(night['date'])} ({night['location']}).",
             reply_markup=host_night_card_with_poll(
                 night_id,
                 is_owner=False,
-                has_active_poll=bool(poll),
+                has_active_poll=bool(poll and poll["status"] == "open"),
                 has_any_poll=bool(poll),
                 registration_open=bool(night["registration_open"]),
             ),

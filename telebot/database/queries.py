@@ -478,7 +478,8 @@ async def can_register_for_night(
 
 
 async def get_users_for_registration_notification_by_levels(
-    night_id: int, levels: list[str]
+    night_id: int, levels: list[str],
+    exclude_unavailable_poll_id: int | None = None,
 ) -> list[dict]:
     night = await get_night(night_id)
     if not night:
@@ -487,20 +488,29 @@ async def get_users_for_registration_notification_by_levels(
     host_id = night["host_telegram_id"] or 0
     placeholders = ",".join("?" * len(levels))
 
-    async with db.conn.execute(
-        f"""SELECT u.telegram_id, u.first_name, u.username, u.subscriber_level
-            FROM users u
-            WHERE u.is_approved = 1
-              AND u.subscriber_level IN ({placeholders})
-              AND u.telegram_id != ?
-              AND u.telegram_id NOT IN (
-                  SELECT r.user_telegram_id
-                  FROM registrations r
-                  JOIN game_sessions gs ON gs.id = r.session_id
-                  WHERE gs.game_night_id = ?
-              )""",
-        (*levels, host_id, night_id),
-    ) as cur:
+    sql = f"""SELECT u.telegram_id, u.first_name, u.username, u.subscriber_level
+              FROM users u
+              WHERE u.is_approved = 1
+                AND u.subscriber_level IN ({placeholders})
+                AND u.telegram_id != ?
+                AND u.telegram_id NOT IN (
+                    SELECT r.user_telegram_id
+                    FROM registrations r
+                    JOIN game_sessions gs ON gs.id = r.session_id
+                    WHERE gs.game_night_id = ?
+                )"""
+    params: list = [*levels, host_id, night_id]
+
+    if exclude_unavailable_poll_id is not None:
+        sql += """ AND u.telegram_id NOT IN (
+                      SELECT user_id FROM availability_responses
+                      WHERE poll_id = ? AND status = 'unavailable'
+                  )"""
+        params.append(exclude_unavailable_poll_id)
+
+    sql += " ORDER BY u.subscriber_level, u.first_name"
+
+    async with db.conn.execute(sql, params) as cur:
         return [dict(r) for r in await cur.fetchall()]
 
 

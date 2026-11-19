@@ -8,7 +8,7 @@ from database.queries import (
     get_night,
     update_night_date,
     update_night_location,
-    get_active_poll_for_night,
+    get_last_poll_for_night,
 )
 from keyboards.menus import host_night_card_with_poll, cancel_edit
 from states.states import EditNight
@@ -56,7 +56,7 @@ async def save_date(message: Message, state: FSMContext) -> None:
     await state.clear()
 
     night = await get_night(night_id)
-    poll = await get_active_poll_for_night(night_id)
+    poll = await get_last_poll_for_night(night_id)
     text = (
         f"✅ Дата обновлена: {fmt_date(night['date'])}\n\n"
         f"🎲 Игротека\n"
@@ -71,7 +71,7 @@ async def save_date(message: Message, state: FSMContext) -> None:
         reply_markup=host_night_card_with_poll(
             night_id,
             is_owner=can_manage,
-            has_active_poll=bool(poll),
+            has_active_poll=bool(poll and poll["status"] == "open"),
             has_any_poll=bool(poll),
         ),
     )
@@ -113,7 +113,7 @@ async def save_location(message: Message, state: FSMContext) -> None:
     await state.clear()
 
     night = await get_night(night_id)
-    poll = await get_active_poll_for_night(night_id)
+    poll = await get_last_poll_for_night(night_id)
     text = (
         f"✅ Место обновлено.\n\n"
         f"🎲 Игротека\n"
@@ -128,7 +128,7 @@ async def save_location(message: Message, state: FSMContext) -> None:
         reply_markup=host_night_card_with_poll(
             night_id,
             is_owner=can_manage,
-            has_active_poll=bool(poll),
+            has_active_poll=bool(poll and poll["status"] == "open"),
             has_any_poll=bool(poll),
         ),
     )

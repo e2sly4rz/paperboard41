@@ -13,7 +13,7 @@ from database.queries import (
     create_game_night,
     add_session,
     search_games,
-    get_active_poll_for_night,
+    get_last_poll_for_night,
     find_host_conflict,
 )
 from keyboards.menus import (
@@ -438,10 +438,9 @@ async def host_finish(call: CallbackQuery, state: FSMContext) -> None:
 
     await state.clear()
 
-    # Случай 1: игры уже добавлялись — night_id есть
     if night_id:
         night = await get_night(night_id)
-        poll = await get_active_poll_for_night(night_id)
+        poll = await get_last_poll_for_night(night_id)
 
         free_label = "🆓 Бесплатная" if night["is_free"] else "💰 Платная"
         text = (
@@ -459,7 +458,7 @@ async def host_finish(call: CallbackQuery, state: FSMContext) -> None:
             reply_markup=host_night_card_with_poll(
                 night_id,
                 is_owner=True,
-                has_active_poll=bool(poll),
+                has_active_poll=bool(poll and poll["status"] == "open"),
                 has_any_poll=bool(poll),
                 registration_open=bool(night["registration_open"]),
             ),
@@ -467,13 +466,13 @@ async def host_finish(call: CallbackQuery, state: FSMContext) -> None:
         await call.answer()
         return
 
-    # Случай 2: игры не добавлялись, но дата и место введены — создаём пустую игротеку
     if date and location:
         night_id = await create_game_night(
             date, location, call.from_user.id,
             is_free=is_free,
         )
         night = await get_night(night_id)
+        poll = await get_last_poll_for_night(night_id)
 
         free_label = "🆓 Бесплатная" if night["is_free"] else "💰 Платная"
         text = (
@@ -494,19 +493,19 @@ async def host_finish(call: CallbackQuery, state: FSMContext) -> None:
             reply_markup=host_night_card_with_poll(
                 night_id,
                 is_owner=True,
-                has_active_poll=False,
-                has_any_poll=False,
+                has_active_poll=bool(poll and poll["status"] == "open"),
+                has_any_poll=bool(poll),
                 registration_open=False,
             ),
         )
         await call.answer()
         return
 
-    # Случай 3: ничего не введено — ошибка
     await safe_edit(
         call.message,
         "Игротека не создана: не указаны дата и место.",
-        reply_markup=main_menu(is_host_user, call.from_user.id, is_provodnik=True),
+        reply_markup=main_menu(is_host_user, call.from_user.id,
+                               is_provodnik=True),
     )
     await call.answer()
 
@@ -518,6 +517,7 @@ async def host_cancel(call: CallbackQuery, state: FSMContext) -> None:
     await safe_edit(
         call.message,
         "Создание игротеки отменено.",
-        reply_markup=main_menu(is_host_user, call.from_user.id, is_provodnik=True),
+        reply_markup=main_menu(is_host_user, call.from_user.id,
+                               is_provodnik=True),
     )
     await call.answer()

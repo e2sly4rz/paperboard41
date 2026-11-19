@@ -5,6 +5,7 @@ from database.queries import (
     get_night,
     create_availability_poll,
     get_active_poll_for_night,
+    get_last_poll_for_night,
     list_availability_responses,
     close_availability_poll,
     get_users_for_poll_notification,
@@ -81,25 +82,29 @@ async def poll_results(call: CallbackQuery) -> None:
         await call.answer("Игротека не найдена", show_alert=True)
         return
 
-    poll = await get_active_poll_for_night(night_id)
+    poll = await get_last_poll_for_night(night_id)
     if not poll:
-        await call.answer("Активного опроса нет", show_alert=True)
+        await call.answer("Опросов ещё не было", show_alert=True)
         return
 
     responses = await list_availability_responses(poll["id"])
     available = [r for r in responses if r["status"] == "available"]
     unavailable = [r for r in responses if r["status"] == "unavailable"]
 
+    poll_status = "🔒 Опрос закрыт" if poll["status"] == "closed" else "📊 Опрос открыт"
+
     if not responses:
         await safe_edit(
             call.message,
-            f"📊 <b>Результаты опроса</b>\n\n"
+            f"📊 <b>Результаты опроса</b>\n"
+            f"{poll_status}\n\n"
             f"Игротека {fmt_date(night['date'])} • {night['location']}\n\n"
             f"Пока никто не ответил.",
             parse_mode="HTML",
             reply_markup=host_night_card_with_poll(
                 night_id, is_owner=False,
-                has_active_poll=True, has_any_poll=True,
+                has_active_poll=bool(poll["status"] == "open"),
+                has_any_poll=True,
             ),
         )
         await call.answer()
@@ -118,7 +123,8 @@ async def poll_results(call: CallbackQuery) -> None:
     max_count = max(counts.values()) or 1
 
     lines = [
-        "📊 <b>Результаты опроса</b>",
+        f"📊 <b>Результаты опроса</b>",
+        poll_status,
         f"Игротека {fmt_date(night['date'])} • {night['location']}",
         f"Ответили: {len(responses)} чел. "
         f"(готовы играть: {len(available)}, не смогут: {len(unavailable)})\n",
@@ -154,7 +160,8 @@ async def poll_results(call: CallbackQuery) -> None:
         parse_mode="HTML",
         reply_markup=host_night_card_with_poll(
             night_id, is_owner=False,
-            has_active_poll=True, has_any_poll=True,
+            has_active_poll=bool(poll["status"] == "open"),
+            has_any_poll=True,
         ),
     )
     await call.answer()
