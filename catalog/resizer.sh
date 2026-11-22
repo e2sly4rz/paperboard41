@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # resizer.sh
-# Конвертирует PNG/JPG/JPEG из covers/ в WebP 100×100 в covers_webp/
+# Конвертирует PNG/JPG/JPEG/WebP из covers/ в WebP 200x200 в covers_webp/
+# Не-квадратные изображения дополняются до квадрата ПРОЗРАЧНЫМ фоном.
+# Пропускает файлы, которые уже есть в covers_webp/.
 # Требует: ImageMagick 7 (команда `magick`)
 
 set -euo pipefail
@@ -10,30 +12,49 @@ DST="covers_webp"
 
 mkdir -p "$DST"
 
-# find + -iname — регистронезависимо (.png, .PNG, .jpg, .JPG, .jpeg, .JPEG)
+# find + -iname — регистронезависимо (.png, .PNG, .jpg, .JPG, .jpeg, .JPEG, .webp, .WEBP)
 count=0
 skipped=0
+failed=0
 
 while IFS= read -r -d '' f; do
   base=$(basename "$f")
   name="${base%.*}"          # отрезаем любое расширение
+  out="$DST/${name}.webp"
 
+  # Пропускаем, если уже сконвертирован
+  if [ -e "$out" ]; then
+    skipped=$((skipped + 1))
+    printf '  SKIP %s (already exists)\n' "$base"
+    continue
+  fi
+
+  # >  = вписать в 200x200, сохранив пропорции (без обрезки)
+  # -background none + -extent = добить до квадрата ПРОЗРАЧНЫМ
   if magick "$f" \
-      -resize 200x200^ \
+      -resize "200x200>" \
       -gravity center \
-      -extent 200x200 \
+      -background none \
+      -extent "200x200" \
       -strip \
       -quality 82 \
-      "$DST/${name}.webp" 2>/dev/null; then
+      "$out" 2>/dev/null; then
     count=$((count + 1))
-    printf '  ✓ %s\n' "$base"
+    printf '  OK %s\n' "$base"
   else
-    skipped=$((skipped + 1))
-    printf '  ✗ %s (ошибка конвертации)\n' "$base"
+    failed=$((failed + 1))
+    printf '  FAIL %s\n' "$base"
+    [ -e "$out" ] && rm -f "$out"
+  fi
+
+  if [ "$count" -gt 0 ] && [ $((count % 25)) -eq 0 ]; then
+    printf '  ... %d / %d\n' "$count" "$(find "$SRC" -maxdepth 1 -type f \( \
+      -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.webp' \
+    \) | wc -l)"
   fi
 done < <(find "$SRC" -maxdepth 1 -type f \( \
-  -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' \
+  -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.webp' \
 \) -print0)
 
 echo
-echo "Готово: $count файлов → $DST/, пропущено/ошибок: $skipped"
+echo "Done: converted $count, skipped $skipped, errors $failed -> $DST"
