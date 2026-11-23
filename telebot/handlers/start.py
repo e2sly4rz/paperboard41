@@ -99,6 +99,8 @@ async def cmd_start(message: Message) -> None:
             "доступны игры, отмеченные замком."
         )
 
+    is_provodnik = user["subscriber_level"] in ("provodnik", "host")
+
     await message.answer(
         f"🎲 <b>Привет, {u.first_name}!</b>\n\n"
         f"Это бот клуба настольных игр «{CLUB_NAME}».\n\n"
