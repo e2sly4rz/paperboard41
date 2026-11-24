@@ -86,11 +86,23 @@ async def show_night(call: CallbackQuery) -> None:
     if poll:
         lines.append("\n📊 Хост собирает удобное время для игр.")
 
+    cars = await list_cars(night_id)
+    car_titles = {c["id"]: c["title"] for c in cars}
+
     if not sessions:
         lines.append("\n<i>В этой игротеке пока нет игр.</i>")
     else:
         lines.append("")
+        current_car = "___init___"
         for i, s in enumerate(sessions, 1):
+            car_id = s.get("car_id")
+            if car_id != current_car:
+                if current_car != "___init___" and car_id is not None:
+                    lines.append("")
+                if car_id is not None:
+                    lines.append(f"🚃 <b>{car_titles.get(car_id, 'Вагон')}</b>")
+                current_car = car_id
+
             time_range = _time_range(s)
             title = s["title"]
             taken = s["max_slots"] - s["free_slots"]

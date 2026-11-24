@@ -37,7 +37,10 @@ class AddGame(StatesGroup):
     subscriber_only = State()
 
 
-# NEW: вишлист
 class Wishlist(StatesGroup):
     searching_game = State()
     picking_game = State()
+
+
+class Car(StatesGroup):
+    title = State()

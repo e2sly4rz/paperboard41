@@ -79,8 +79,8 @@ def host_menu_with_nights(nights: list[dict],
     kb = InlineKeyboardBuilder()
     kb.button(text="➕ Создать игротеку", callback_data="host_create")
     kb.button(text="📚 Добавить игру в каталог", callback_data="host_add_game")
-    # NEW: вишлисты проводников
     kb.button(text="⭐ Вишлисты проводников", callback_data="host_wishlists")
+    kb.button(text="🚃 Вагоны (столы)", callback_data="host_cars")
 
     for n in nights:
         is_own = own_ids is None or n["id"] in own_ids
@@ -101,8 +101,8 @@ def host_menu_empty() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.button(text="➕ Создать игротеку", callback_data="host_create")
     kb.button(text="📚 Добавить игру в каталог", callback_data="host_add_game")
-    # NEW: вишлисты проводников
     kb.button(text="⭐ Вишлисты проводников", callback_data="host_wishlists")
+    kb.button(text="🚃 Вагоны (столы)", callback_data="host_cars")
     kb.button(text="⬅️ Назад", callback_data="back_main")
     kb.adjust(1)
     return kb.as_markup()
@@ -369,5 +369,56 @@ def close_reason_picker(item_id: int) -> InlineKeyboardMarkup:
     kb.button(text="🚫 Неактуально",
               callback_data=f"wishlist_close:{item_id}:irrelevant")
     kb.button(text="⬅️ Отмена", callback_data="host_wishlists")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+# ---------- Вагоны (столы) ----------
+
+def host_cars_menu(cars: list[dict], night_id: int | None = None) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    if night_id is not None:
+        kb.button(text="➕ Создать вагон",
+                  callback_data=f"host_car_create:{night_id}")
+    for car in cars:
+        kb.button(
+            text=f"🚃 {car['title']}",
+            callback_data=f"host_car:{car['id']}",
+        )
+    kb.button(text="⬅️ Назад", callback_data="host_menu")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def host_car_card(car_id: int, has_sessions: bool) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(text="➕ Привязать игру",
+              callback_data=f"host_car_attach:{car_id}")
+    if has_sessions:
+        kb.button(text="🔓 Отвязать все игры",
+                  callback_data=f"host_car_detach_all:{car_id}")
+    kb.button(text="🗑 Удалить вагон",
+              callback_data=f"host_car_del:{car_id}")
+    kb.button(text="⬅️ К вагонам", callback_data="host_cars")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def confirm_delete_car(car_id: int) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(text="🗑 Да, удалить", callback_data=f"host_car_del_yes:{car_id}")
+    kb.button(text="⬅️ Отмена", callback_data=f"host_car:{car_id}")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def car_sessions_picker(car_id: int, sessions: list[dict]) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    for s in sessions:
+        kb.button(
+            text=f"{s['time_start']} — {s['game_title']}",
+            callback_data=f"host_car_pick_session:{car_id}:{s['id']}",
+        )
+    kb.button(text="⬅️ Отмена", callback_data=f"host_car:{car_id}")
     kb.adjust(1)
     return kb.as_markup()

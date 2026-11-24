@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS game_sessions (
     id                       INTEGER PRIMARY KEY AUTOINCREMENT,
     game_night_id            INTEGER NOT NULL,
     game_id                  INTEGER NOT NULL,
+    car_id                   INTEGER,
     time_start               TEXT NOT NULL,
     time_end                 TEXT,
     max_slots                INTEGER NOT NULL,
@@ -131,7 +132,6 @@ CREATE TABLE IF NOT EXISTS availability_responses (
     FOREIGN KEY (user_id) REFERENCES users(telegram_id)
 );
 
--- NEW: вишлист
 CREATE TABLE IF NOT EXISTS wishlist_items (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id        INTEGER NOT NULL,
@@ -144,6 +144,17 @@ CREATE TABLE IF NOT EXISTS wishlist_items (
     close_reason   TEXT,
     FOREIGN KEY (user_id) REFERENCES users(telegram_id),
     FOREIGN KEY (game_id) REFERENCES games(id)
+);
+
+-- NEW: вагоны (столы)
+CREATE TABLE IF NOT EXISTS night_cars (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    game_night_id  INTEGER NOT NULL,
+    title          TEXT NOT NULL,
+    kind           TEXT NOT NULL DEFAULT 'newbie'
+        CHECK (kind IN ('newbie', 'host', 'genre', 'custom')),
+    created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (game_night_id) REFERENCES game_nights(id) ON DELETE CASCADE
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_session_user
@@ -161,12 +172,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_notif_unique
 CREATE INDEX IF NOT EXISTS idx_avail_poll
     ON availability_responses(poll_id);
 
--- NEW: индексы вишлиста
 CREATE INDEX IF NOT EXISTS idx_wishlist_user
     ON wishlist_items(user_id, status);
 
 CREATE INDEX IF NOT EXISTS idx_wishlist_game
     ON wishlist_items(game_id, status);
+
+-- NEW: индекс вагонов
+CREATE INDEX IF NOT EXISTS idx_night_cars_night
+    ON night_cars(game_night_id);
 """
 
 
@@ -177,10 +191,6 @@ async def _column_exists(table: str, column: str) -> bool:
 
 
 async def _migrate_availability_responses_status() -> None:
-    """Добавляет колонку status и делает time_from/time_to nullable.
-
-    SQLite не умеет ALTER COLUMN, поэтому пересоздаём таблицу.
-    """
     async with db.conn.execute("PRAGMA table_info(availability_responses)") as cur:
         columns = [row[1] for row in await cur.fetchall()]
 
@@ -281,8 +291,11 @@ async def _run_migrations() -> None:
             "INTEGER NOT NULL DEFAULT 0"
         )
 
-    # NEW: вишлист — таблица создаётся в SCHEMA (IF NOT EXISTS),
-    # отдельная миграция не нужна. Индексы — тоже в SCHEMA.
+    # NEW: вагоны — колонка car_id в game_sessions
+    if not await _column_exists("game_sessions", "car_id"):
+        await db.conn.execute(
+            "ALTER TABLE game_sessions ADD COLUMN car_id INTEGER"
+        )
 
     await db.conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_sessions_created_by "

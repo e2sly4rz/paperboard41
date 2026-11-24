@@ -190,16 +190,17 @@ async def add_session(
     registration_opens_at: str | None = None,
     registration_min_level: str = "passenger",
     registration_approved: int = 1,
+    car_id: int | None = None,
 ) -> int:
     cur = await db.conn.execute(
         """INSERT INTO game_sessions
            (game_night_id, game_id, time_start, time_end, max_slots,
             created_by_user_id, registration_opens_at,
-            registration_min_level, registration_approved)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            registration_min_level, registration_approved, car_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (game_night_id, game_id, time_start, time_end, max_slots,
          created_by_user_id, registration_opens_at,
-         registration_min_level, registration_approved),
+         registration_min_level, registration_approved, car_id),
     )
     await db.conn.commit()
     return cur.lastrowid
@@ -245,12 +246,13 @@ async def get_night_sessions(night_id: int) -> list[dict]:
                   gs.registration_opens_at,
                   gs.registration_min_level,
                   gs.registration_approved,
+                  gs.car_id,
                   g.title, g.genre, g.min_players, g.max_players,
                   g.duration_min, g.duration_max, g.is_subscriber_only
            FROM game_sessions gs
            JOIN games g ON g.id = gs.game_id
            WHERE gs.game_night_id = ?
-           ORDER BY gs.time_start""",
+           ORDER BY (gs.car_id IS NULL) DESC, gs.car_id, gs.time_start""",
         (night_id,),
     ) as cur:
         return [dict(r) for r in await cur.fetchall()]
@@ -266,6 +268,7 @@ async def get_night_sessions_with_conflicts(
                   gs.registration_opens_at,
                   gs.registration_min_level,
                   gs.registration_approved,
+                  gs.car_id,
                   g.title, g.genre, g.min_players, g.max_players,
                   g.duration_min, g.duration_max, g.is_subscriber_only,
                   gn.date,
@@ -284,7 +287,7 @@ async def get_night_sessions_with_conflicts(
            JOIN games g       ON g.id  = gs.game_id
            JOIN game_nights gn ON gn.id = gs.game_night_id
            WHERE gs.game_night_id = ?
-           ORDER BY gs.time_start""",
+           ORDER BY (gs.car_id IS NULL) DESC, gs.car_id, gs.time_start""",
         (user_id, night_id),
     ) as cur:
         return [dict(r) for r in await cur.fetchall()]
@@ -597,9 +600,10 @@ async def can_passengers_register_early(night_id: int) -> bool:
                     if not (resp_from <= game_start_h and game_end_h <= resp_to):
                         continue
 
-                conflict = await find_session_conflict_for_user(s["id"], uid)
-                if conflict is None:
-                    return False
+                # NEW: доступный проводник = не записан в этой ночи →
+                # конфликтов в этой ночи нет. Если он не исключён ответом
+                # "available с неподходящим окном" — значит, "может" → блокирует.
+                return False
 
     last_at = await get_last_provodnik_registration_time(night_id)
     if last_at is None:
@@ -855,6 +859,7 @@ async def get_night_sessions_for_edit(night_id: int) -> list[dict]:
         """SELECT gs.id, gs.time_start, gs.time_end,
                   gs.max_slots, gs.slots_taken,
                   gs.created_by_user_id,
+                  gs.car_id,
                   g.title AS game_title
            FROM game_sessions gs
            JOIN games g ON g.id = gs.game_id
@@ -1151,7 +1156,6 @@ async def wishlist_has_game(user_id: int, game_id: int) -> bool:
 
 
 async def add_wishlist_item(user_id: int, game_id: int) -> int | None:
-    """Добавляет игру в вишлист. Возвращает id или None (лимит/дубль)."""
     if await count_active_wishlist(user_id) >= WISHLIST_LIMIT:
         return None
     if await wishlist_has_game(user_id, game_id):
@@ -1246,5 +1250,90 @@ async def wishlist_summary() -> list[dict]:
            WHERE w.status = 'active'
            GROUP BY w.game_id
            ORDER BY cnt DESC, g.title"""
+    ) as cur:
+        return [dict(r) for r in await cur.fetchall()]
+
+
+# ---------- Вагоны (столы) ----------
+
+async def create_car(game_night_id: int, title: str,
+                     kind: str = "newbie") -> int:
+    cur = await db.conn.execute(
+        """INSERT INTO night_cars (game_night_id, title, kind)
+           VALUES (?, ?, ?)""",
+        (game_night_id, title, kind),
+    )
+    await db.conn.commit()
+    return cur.lastrowid
+
+
+async def list_cars(night_id: int) -> list[dict]:
+    async with db.conn.execute(
+        """SELECT id, game_night_id, title, kind, created_at
+           FROM night_cars
+           WHERE game_night_id = ?
+           ORDER BY id""",
+        (night_id,),
+    ) as cur:
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def get_car(car_id: int) -> dict | None:
+    async with db.conn.execute(
+        "SELECT * FROM night_cars WHERE id = ?", (car_id,)
+    ) as cur:
+        row = await cur.fetchone()
+        return dict(row) if row else None
+
+
+async def delete_car(car_id: int) -> None:
+    await db.conn.execute(
+        "UPDATE game_sessions SET car_id = NULL WHERE car_id = ?",
+        (car_id,),
+    )
+    await db.conn.execute("DELETE FROM night_cars WHERE id = ?", (car_id,))
+    await db.conn.commit()
+
+
+async def assign_session_to_car(session_id: int, car_id: int | None) -> None:
+    await db.conn.execute(
+        "UPDATE game_sessions SET car_id = ? WHERE id = ?",
+        (car_id, session_id),
+    )
+    await db.conn.commit()
+
+
+async def count_sessions_in_car(car_id: int) -> int:
+    async with db.conn.execute(
+        "SELECT COUNT(*) FROM game_sessions WHERE car_id = ?",
+        (car_id,),
+    ) as cur:
+        row = await cur.fetchone()
+        return row[0] if row else 0
+
+
+async def list_sessions_without_car(night_id: int) -> list[dict]:
+    async with db.conn.execute(
+        """SELECT gs.id, gs.time_start, gs.time_end,
+                  gs.max_slots, gs.slots_taken,
+                  g.title AS game_title
+           FROM game_sessions gs
+           JOIN games g ON g.id = gs.game_id
+           WHERE gs.game_night_id = ? AND gs.car_id IS NULL
+           ORDER BY gs.time_start""",
+        (night_id,),
+    ) as cur:
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def list_sessions_in_car(car_id: int) -> list[dict]:
+    async with db.conn.execute(
+        """SELECT gs.id, gs.time_start, gs.time_end,
+                  g.title AS game_title
+           FROM game_sessions gs
+           JOIN games g ON g.id = gs.game_id
+           WHERE gs.car_id = ?
+           ORDER BY gs.time_start""",
+        (car_id,),
     ) as cur:
         return [dict(r) for r in await cur.fetchall()]
