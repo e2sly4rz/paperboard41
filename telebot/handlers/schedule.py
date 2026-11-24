@@ -16,6 +16,7 @@ from database.queries import (
     mark_availability_unavailable,
     find_session_conflict_for_user,
     can_register_for_night,
+    list_cars,
 )
 from keyboards.menus import (
     nights_list,

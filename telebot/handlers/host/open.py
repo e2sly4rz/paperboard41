@@ -6,6 +6,7 @@ from database.queries import (
     open_night_registration,
     get_users_for_registration_notification_by_levels,
     get_active_poll_for_night,
+    get_last_poll_for_night,
 )
 from keyboards.menus import host_night_card_with_poll
 from utils import fmt_date
