@@ -1,41 +1,41 @@
 from datetime import datetime
 
-from aiogram import Router, F
+from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from database.db import db
 from database.queries import (
+    add_session,
+    delete_session,
+    find_host_conflict,
     get_game,
+    get_last_poll_for_night,
     get_night,
     get_night_sessions_for_edit,
     get_session,
     get_session_registrations_full,
-    add_session,
-    delete_session,
     search_games,
-    get_last_poll_for_night,
-    find_host_conflict,
 )
 from keyboards.menus import (
+    confirm_delete_session,
+    duration_picker,
+    games_search_results,
     host_night_card_with_poll,
     host_sessions_list,
-    confirm_delete_session,
-    games_search_results,
     search_prompt_keyboard,
-    time_start_picker,
-    duration_picker,
     slots_picker_autofill,
+    time_start_picker,
+)
+from notifications import (
+    notify_game_owner_deleted,
+    notify_registrants_deleted,
+    notify_session_deleted,
 )
 from states.states import AddSessionToNight
-from utils import is_admin, is_host_or_admin, fmt_date
-from notifications import (
-    notify_session_deleted,
-    notify_registrants_deleted,
-    notify_game_owner_deleted,
-)
+from utils import fmt_date, is_admin, is_host_or_admin
 
-from ._helpers import add_minutes, can_manage_night, can_delete_session
+from ._helpers import add_minutes, can_delete_session, can_manage_night
 
 router = Router()
 

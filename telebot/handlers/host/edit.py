@@ -1,16 +1,16 @@
 from datetime import datetime
 
-from aiogram import Router, F
+from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from database.queries import (
+    get_last_poll_for_night,
     get_night,
     update_night_date,
     update_night_location,
-    get_last_poll_for_night,
 )
-from keyboards.menus import host_night_card_with_poll, cancel_edit
+from keyboards.menus import cancel_edit, host_night_card_with_poll
 from states.states import EditNight
 from utils import fmt_date
 

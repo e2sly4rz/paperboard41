@@ -1,20 +1,20 @@
-from aiogram import Router, F
+from aiogram import F, Router
 from aiogram.types import CallbackQuery
 
 from database.queries import (
-    get_night,
+    close_availability_poll,
     create_availability_poll,
     get_active_poll_for_night,
     get_last_poll_for_night,
-    list_availability_responses,
-    close_availability_poll,
+    get_night,
     get_users_for_poll_notification,
+    list_availability_responses,
 )
 from keyboards.menus import (
     host_night_card_with_poll,
 )
-from utils import fmt_date, safe_edit, is_host_or_admin
 from notifications import notify_poll_created
+from utils import fmt_date, is_host_or_admin, safe_edit
 
 router = Router()
 
@@ -123,7 +123,7 @@ async def poll_results(call: CallbackQuery) -> None:
     max_count = max(counts.values()) or 1
 
     lines = [
-        f"📊 <b>Результаты опроса</b>",
+        "📊 <b>Результаты опроса</b>",
         poll_status,
         f"Игротека {fmt_date(night['date'])} • {night['location']}",
         f"Ответили: {len(responses)} чел. "

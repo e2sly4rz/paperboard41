@@ -1,33 +1,34 @@
-from aiogram import Router, F
+from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from database.db import db
 from database.queries import (
-    list_upcoming_nights,
+    can_register_for_night,
+    find_session_conflict_for_user,
+    get_active_poll_for_night,
     get_night,
     get_night_sessions_with_conflicts,
     get_session,
-    register_for_session,
+    get_session_with_registrations,
     get_user,
-    get_active_poll_for_night,
-    upsert_availability_response,
-    mark_availability_unavailable,
-    find_session_conflict_for_user,
-    can_register_for_night,
     list_cars,
+    list_upcoming_nights,
+    mark_availability_unavailable,
+    register_for_session,
+    upsert_availability_response,
 )
 from keyboards.menus import (
-    nights_list,
-    session_card,
     main_menu,
+    nights_list,
     poll_time_grid,
     poll_time_grid_after,
+    session_card,
 )
-from states.states import PollTime
-from utils import is_host_or_admin, fmt_date, safe_edit
 from notifications import notify_game_author_registration
+from states.states import PollTime
+from utils import fmt_date, is_host_or_admin, safe_edit
 
 router = Router()
 
@@ -114,11 +115,29 @@ async def show_night(call: CallbackQuery) -> None:
             if s["free_slots"] <= 0:
                 markers += " ⛔"
 
+            # хост игры: автор сессии, иначе — хост ночи
+            author_id = s.get("created_by_user_id")
+            author_name = s.get("author_first_name")
+            author_username = s.get("author_username")
+
+            if author_id == call.from_user.id:
+                host_label = "Вы"
+            elif author_name:
+                host_label = author_name
+                if author_username:
+                    host_label += f" (@{author_username})"
+            else:
+                # fallback — хост ночи (если автор не указан)
+                if s.get("host_telegram_id") == call.from_user.id:
+                    host_label = "Вы"
+                else:
+                    host_label = ""  # нет данных — не показываем
+
+            host_part = f" · 🎩 {host_label}" if host_label else ""
+
             padding = " " if i < 10 else ""
-            lines.append(f"{padding}{i}. <b>{time_range}</b>")
+            lines.append(f"{padding}{i}. <b>{time_range}</b>{host_part}")
             lines.append(f" {title} · {taken}/{s['max_slots']}{markers}")
-            if i < len(sessions):
-                lines.append("")
 
     text = "\n".join(lines)
     if len(text) > 3900:
@@ -157,7 +176,7 @@ async def show_night(call: CallbackQuery) -> None:
 @router.callback_query(F.data.startswith("session:"))
 async def show_session(call: CallbackQuery) -> None:
     session_id = int(call.data.split(":")[1])
-    s = await get_session(session_id)
+    s = await get_session_with_registrations(session_id)
     if not s:
         await call.answer("Сессия не найдена", show_alert=True)
         return
@@ -203,13 +222,45 @@ async def show_session(call: CallbackQuery) -> None:
 
     taken = s["max_slots"] - s["free_slots"]
     free_label = "🆓 Бесплатная игротека" if s.get("is_free") else "💰 Платная игротека"
+
+    # хост
+    author_id = s.get("created_by_user_id")
+    author_name = s.get("author_first_name")
+    author_username = s.get("author_username")
+    if author_id == call.from_user.id:
+        host_label = "Вы"
+    elif author_name:
+        host_label = author_name
+        if author_username:
+            host_label += f" (@{author_username})"
+    elif s.get("host_telegram_id") == call.from_user.id:
+        host_label = "Вы"
+    else:
+        host_label = None
+
+    # записанные
+    regs = s.get("registrations", [])
+    if not regs:
+        players_label = "Пока никто не записан"
+    else:
+        names = []
+        for r in regs:
+            name = r.get("first_name") or "Без имени"
+            username = f" (@{r['username']})" if r.get("username") else ""
+            names.append(f"{name}{username}")
+        players_label = ", ".join(names)
+
     text = (
         f"🎲 <b>{s['title']}</b>\n"
         f"Дата: {fmt_date(s['date'])}\n"
         f"Время: {s['time_start']}–{s['time_end'] or '?'}\n"
         f"Место: {s['location']}\n"
         f"{free_label}\n"
-        f"Занято мест: {taken} из {s['max_slots']}\n"
+    )
+    if host_label:
+        text += f"🎩 Хост: {host_label}\n"
+    text += (
+        f"👥 Записаны ({taken}/{s['max_slots']}): {players_label}\n"
     )
     if s["is_subscriber_only"]:
         text += "\n⭐ Только для подписчиков «Проводник»."

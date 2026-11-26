@@ -7,7 +7,7 @@ from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from database.db import db
-from database.queries import get_night, get_game
+from database.queries import get_game, get_night
 from utils import fmt_date
 
 

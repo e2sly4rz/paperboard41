@@ -1,32 +1,32 @@
 import locale
 from datetime import datetime, timedelta
 
-from aiogram import Router, F
+from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram_calendar import SimpleCalendar, SimpleCalendarCallback
 
 from database.queries import (
-    get_game,
-    get_night,
-    create_game_night,
     add_session,
-    search_games,
-    get_last_poll_for_night,
+    create_game_night,
     find_host_conflict,
+    get_game,
+    get_last_poll_for_night,
+    get_night,
+    search_games,
 )
 from keyboards.menus import (
-    main_menu,
-    games_search_create,
-    search_prompt_keyboard,
-    time_start_picker,
     duration_picker,
-    slots_picker_autofill,
+    games_search_create,
     host_night_card_with_poll,
+    main_menu,
+    search_prompt_keyboard,
+    slots_picker_autofill,
+    time_start_picker,
 )
 from states.states import CreateNight
-from utils import is_host_or_admin, fmt_date, safe_edit
+from utils import fmt_date, is_host_or_admin, safe_edit
 
 from ._helpers import add_minutes
 

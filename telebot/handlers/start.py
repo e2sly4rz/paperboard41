@@ -1,19 +1,19 @@
-from aiogram import Router, F
-from aiogram.filters import CommandStart, Command
-from aiogram.types import Message, CallbackQuery
+from aiogram import F, Router
+from aiogram.filters import Command, CommandStart
+from aiogram.types import CallbackQuery, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from config import ADMIN_ID
 from database.queries import (
-    ensure_user,
-    set_user_level,
-    get_user,
     approve_user,
-    revoke_user,
-    list_pending_users,
+    ensure_user,
+    get_user,
     list_all_users_grouped,
+    list_pending_users,
+    revoke_user,
+    set_user_level,
 )
-from keyboards.menus import main_menu, admin_help_back
+from keyboards.menus import admin_help_back, main_menu
 from utils import is_admin, safe_edit
 
 router = Router()

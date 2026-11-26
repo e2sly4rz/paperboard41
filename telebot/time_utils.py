@@ -3,7 +3,6 @@ from zoneinfo import ZoneInfo
 
 from config import CLUB_TIMEZONE
 
-
 _TZ = ZoneInfo(CLUB_TIMEZONE)
 
 

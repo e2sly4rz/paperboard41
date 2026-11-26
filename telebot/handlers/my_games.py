@@ -1,14 +1,14 @@
-from aiogram import Router, F
+from aiogram import F, Router
 from aiogram.types import CallbackQuery
 
 from database.queries import (
-    list_user_registrations,
     cancel_registration,
     get_user,
+    list_user_registrations,
 )
-from keyboards.menus import my_games_list, main_menu
-from utils import is_host_or_admin, safe_edit
+from keyboards.menus import main_menu, my_games_list
 from notifications import notify_game_author_cancellation
+from utils import is_host_or_admin, safe_edit
 
 router = Router()
 

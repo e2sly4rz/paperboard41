@@ -1,30 +1,30 @@
-from aiogram import Router, F
+from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from database.queries import (
-    get_user,
-    search_games,
-    count_active_wishlist,
+    WISHLIST_LIMIT,
     add_wishlist_item,
+    close_wishlist_item,
+    count_active_wishlist,
+    get_user,
+    list_all_wishlists,
     list_user_wishlist,
     remove_wishlist_item,
-    close_wishlist_item,
-    list_all_wishlists,
+    search_games,
     wishlist_summary,
-    WISHLIST_LIMIT,
 )
 from keyboards.menus import (
-    main_menu,
-    wishlist_view,
-    wishlist_search_results,
-    search_prompt_keyboard,
-    host_wishlists,
     close_reason_picker,
+    host_wishlists,
+    main_menu,
+    search_prompt_keyboard,
+    wishlist_search_results,
+    wishlist_view,
 )
+from notifications import notify_wishlist_closed
 from states.states import Wishlist
 from utils import is_admin, is_host_or_admin, safe_edit
-from notifications import notify_wishlist_closed
 
 router = Router()
 

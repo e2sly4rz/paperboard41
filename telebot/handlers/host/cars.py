@@ -1,31 +1,29 @@
-from aiogram import Router, F
+from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from database.queries import (
+    assign_session_to_car,
+    count_sessions_in_car,
+    create_car,
+    delete_car,
+    get_car,
     get_night,
     list_all_upcoming_nights,
     list_cars,
-    get_car,
-    create_car,
-    delete_car,
-    assign_session_to_car,
-    count_sessions_in_car,
-    list_sessions_without_car,
     list_sessions_in_car,
+    list_sessions_without_car,
 )
 from keyboards.menus import (
-    host_cars_menu,
-    host_car_card,
-    confirm_delete_car,
     car_sessions_picker,
+    confirm_delete_car,
+    host_car_card,
+    host_cars_menu,
     search_prompt_keyboard,
 )
 from states.states import Car
-from utils import is_host_or_admin, fmt_date, safe_edit
-
-from ._helpers import can_manage_night
+from utils import fmt_date, is_host_or_admin, safe_edit
 
 router = Router()
 
@@ -86,7 +84,7 @@ async def _show_cars_for_night(call: CallbackQuery, night_id: int) -> None:
     cars = await list_cars(night_id)
 
     lines = [
-        f"🚃 <b>Вагоны (столы)</b>",
+        "🚃 <b>Вагоны (столы)</b>",
         f"📅 {fmt_date(night['date'])} • {night['location']}",
     ]
     if not cars:
@@ -150,7 +148,7 @@ async def car_create_title(message: Message, state: FSMContext) -> None:
     lines = [
         f"✅ Вагон «{title}» создан.",
         "",
-        f"🚃 <b>Вагоны (столы)</b>",
+        "🚃 <b>Вагоны (столы)</b>",
         f"📅 {fmt_date(night['date'])} • {night['location']}",
     ]
     if cars:

@@ -1,20 +1,20 @@
-from aiogram import Router, F
+from aiogram import F, Router
 from aiogram.types import CallbackQuery
 
 from database.queries import (
-    get_night,
-    delete_night,
     count_registrations_for_night,
-    list_all_upcoming_nights,
+    delete_night,
     get_all_night_registrations,
+    get_night,
+    list_all_upcoming_nights,
 )
 from keyboards.menus import (
     confirm_delete_night,
-    host_menu_with_nights,
     host_menu_empty,
+    host_menu_with_nights,
 )
-from utils import fmt_date
 from notifications import notify_night_deleted
+from utils import fmt_date
 
 from ._helpers import can_manage_night
 

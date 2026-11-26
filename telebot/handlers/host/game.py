@@ -1,15 +1,15 @@
-from aiogram import Router, F
+from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from database.queries import (
     create_game,
-    get_user,
     game_title_exists,
+    get_user,
     list_all_upcoming_nights,
 )
-from keyboards.menus import host_menu_with_nights, host_menu_empty
+from keyboards.menus import host_menu_empty, host_menu_with_nights
 from states.states import AddGame
 from utils import is_host_or_admin
 

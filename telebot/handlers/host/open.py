@@ -1,16 +1,15 @@
-from aiogram import Router, F
+from aiogram import F, Router
 from aiogram.types import CallbackQuery
 
 from database.queries import (
-    get_night,
-    open_night_registration,
-    get_users_for_registration_notification_by_levels,
-    get_active_poll_for_night,
     get_last_poll_for_night,
+    get_night,
+    get_users_for_registration_notification_by_levels,
+    open_night_registration,
 )
 from keyboards.menus import host_night_card_with_poll
-from utils import fmt_date
 from notifications import notify_registration_opened
+from utils import fmt_date
 
 from ._helpers import can_manage_night
 

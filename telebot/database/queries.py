@@ -1,9 +1,8 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from config import ADMIN_ID
 from database.db import db
 from time_utils import club_now, session_datetime
-
 
 # ---------- Пользователи ----------
 
@@ -269,9 +268,13 @@ async def get_night_sessions_with_conflicts(
                   gs.registration_min_level,
                   gs.registration_approved,
                   gs.car_id,
+                  gs.created_by_user_id,
+                  ua.first_name AS author_first_name,
+                  ua.username   AS author_username,
                   g.title, g.genre, g.min_players, g.max_players,
                   g.duration_min, g.duration_max, g.is_subscriber_only,
                   gn.date,
+                  gn.host_telegram_id,
                   CASE WHEN EXISTS (
                       SELECT 1
                       FROM registrations r2
@@ -284,8 +287,9 @@ async def get_night_sessions_with_conflicts(
                         AND gs.time_start < COALESCE(gs2.time_end, gs2.time_start)
                   ) THEN 1 ELSE 0 END AS conflict
            FROM game_sessions gs
-           JOIN games g       ON g.id  = gs.game_id
+           JOIN games g        ON g.id  = gs.game_id
            JOIN game_nights gn ON gn.id = gs.game_night_id
+           LEFT JOIN users ua  ON ua.telegram_id = gs.created_by_user_id
            WHERE gs.game_night_id = ?
            ORDER BY (gs.car_id IS NULL) DESC, gs.car_id, gs.time_start""",
         (user_id, night_id),
@@ -535,7 +539,7 @@ async def get_last_provodnik_registration_time(night_id: int) -> datetime | None
     try:
         dt = datetime.fromisoformat(row["last_at"])
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
         return dt
     except (ValueError, TypeError):
         return None
@@ -1337,3 +1341,41 @@ async def list_sessions_in_car(car_id: int) -> list[dict]:
         (car_id,),
     ) as cur:
         return [dict(r) for r in await cur.fetchall()]
+
+async def get_session_with_registrations(session_id: int) -> dict | None:
+    """Сессия + автор + записанные (для карточки)."""
+    async with db.conn.execute(
+        """SELECT gs.*, g.title, g.genre, g.owner,
+                  g.min_players, g.max_players,
+                  g.is_subscriber_only,
+                  gn.id AS night_id,
+                  gn.date, gn.location,
+                  gn.is_free,
+                  gn.registration_open,
+                  gn.host_telegram_id,
+                  ua.first_name AS author_first_name,
+                  ua.username   AS author_username,
+                  (gs.max_slots - gs.slots_taken) AS free_slots
+           FROM game_sessions gs
+           JOIN games g        ON g.id  = gs.game_id
+           JOIN game_nights gn ON gn.id = gs.game_night_id
+           LEFT JOIN users ua  ON ua.telegram_id = gs.created_by_user_id
+           WHERE gs.id = ?""",
+        (session_id,),
+    ) as cur:
+        row = await cur.fetchone()
+        if not row:
+            return None
+        session = dict(row)
+
+    async with db.conn.execute(
+        """SELECT u.telegram_id, u.first_name, u.last_name, u.username
+           FROM registrations r
+           JOIN users u ON u.telegram_id = r.user_telegram_id
+           WHERE r.session_id = ?
+           ORDER BY r.registered_at""",
+        (session_id,),
+    ) as cur:
+        session["registrations"] = [dict(r) for r in await cur.fetchall()]
+
+    return session

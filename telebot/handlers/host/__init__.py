@@ -1,7 +1,6 @@
 from aiogram import Router
 
-from . import menu, create, edit, sessions, delete, poll, game, open, cars
-
+from . import cars, create, delete, edit, game, menu, open, poll, sessions
 
 router = Router()
 router.include_router(menu.router)

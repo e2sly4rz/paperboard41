@@ -1,19 +1,19 @@
-from aiogram import Router, F
+from aiogram import F, Router
 from aiogram.types import CallbackQuery
 
 from database.queries import (
-    get_night,
-    list_all_upcoming_nights,
-    get_session,
     get_all_night_registrations,
     get_last_poll_for_night,
+    get_night,
+    get_session,
+    list_all_upcoming_nights,
 )
 from keyboards.menus import (
-    host_menu_with_nights,
     host_menu_empty,
+    host_menu_with_nights,
     host_night_card_with_poll,
 )
-from utils import is_admin, is_host_or_admin, fmt_date, safe_edit
+from utils import fmt_date, is_admin, is_host_or_admin, safe_edit
 
 from ._helpers import can_manage_night
 

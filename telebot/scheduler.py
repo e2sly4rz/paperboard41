@@ -3,23 +3,22 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from aiogram import Bot
 from aiogram.exceptions import TelegramForbiddenError, TelegramRetryAfter
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from config import CLUB_TIMEZONE
 from database.queries import (
-    get_user_day_registrations,
-    was_day_notification_sent,
-    log_day_notification,
-    get_nights_for_passenger_notification,
-    get_users_for_registration_notification_by_levels,
     get_last_poll_for_night,
+    get_nights_for_passenger_notification,
+    get_user_day_registrations,
+    get_users_for_registration_notification_by_levels,
+    log_day_notification,
     mark_passenger_notified,
+    was_day_notification_sent,
 )
 from notifications import notify_registration_opened
 from utils import fmt_date
-
 
 _TZ = ZoneInfo(CLUB_TIMEZONE)
 
