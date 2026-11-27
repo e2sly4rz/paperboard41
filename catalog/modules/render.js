@@ -15,9 +15,14 @@ export function renderGames(tbody, filtered, state) {
     const hasData = hasDesc || hasExp;
     const isOpen  = game.id === state.openId;
 
-    const coverHtml = game.bggId
+    // Обложка: сначала пробуем по bggId, потом по id (для игр без BGG)
+    const coverFile = game.bggId
+      ? `${game.bggId}.webp`
+      : (game.id ? `${game.id}.webp` : null);
+
+    const coverHtml = coverFile
       ? `<img class="cover-img"
-              src="covers_webp/${game.bggId}.webp"
+              src="covers_webp/${coverFile}"
               alt="" loading="lazy" decoding="async"
               width="32" height="32"
               onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
@@ -33,9 +38,9 @@ export function renderGames(tbody, filtered, state) {
         ? `<ul>${game.expansions.map(e => `<li>${esc(e)}</li>`).join('')}</ul>`
         : `<div class="no-exp">Дополнений нет в наличии</div>`;
 
-      const bigCover = game.bggId
+      const bigCover = coverFile
         ? `<img class="cover-large"
-                src="covers_webp/${game.bggId}.webp"
+                src="covers_webp/${coverFile}"
                 alt="" loading="lazy" decoding="async"
                 width="120" height="120"
                 onerror="this.style.display='none';this.parentElement.classList.add('no-cover');">`

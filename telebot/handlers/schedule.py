@@ -135,9 +135,30 @@ async def show_night(call: CallbackQuery) -> None:
 
             host_part = f" · 🎩 {host_label}" if host_label else ""
 
+            # хост игры: автор сессии, иначе — хост ночи
+            author_id = s.get("created_by_user_id")
+            author_name = s.get("author_first_name")
+            author_username = s.get("author_username")
+
+            if author_id == call.from_user.id:
+                host_label = "Вы"
+            elif author_name:
+                host_label = author_name
+                if author_username:
+                    host_label += f" (@{author_username})"
+            else:
+                if s.get("host_telegram_id") == call.from_user.id:
+                    host_label = "Вы"
+                else:
+                    host_label = ""
+
             padding = " " if i < 10 else ""
-            lines.append(f"{padding}{i}. <b>{time_range}</b>{host_part}")
-            lines.append(f" {title} · {taken}/{s['max_slots']}{markers}")
+            lines.append(f" <b>{time_range}</b>")
+            lines.append(f"{padding}{i}. {title} · {taken}/{s['max_slots']}{markers}")
+            if host_label:
+                lines.append(f"    🎩 {host_label}")
+            if i < len(sessions):
+                lines.append("")
 
     text = "\n".join(lines)
     if len(text) > 3900:
@@ -241,27 +262,30 @@ async def show_session(call: CallbackQuery) -> None:
     # записанные
     regs = s.get("registrations", [])
     if not regs:
-        players_label = "Пока никто не записан"
+        players_block = "👥 Записаны (0/{max}):\n• Пока никто не записан".format(
+            max=s["max_slots"]
+        )
     else:
-        names = []
+        player_lines = []
         for r in regs:
             name = r.get("first_name") or "Без имени"
             username = f" (@{r['username']})" if r.get("username") else ""
-            names.append(f"{name}{username}")
-        players_label = ", ".join(names)
+            player_lines.append(f"• {name}{username}")
+        players_block = (
+            f"👥 Записаны ({taken}/{s['max_slots']}):\n"
+            + "\n".join(player_lines)
+        )
 
+    time_line = f"{s['time_start']}–{s['time_end'] or '?'}"
     text = (
-        f"🎲 <b>{s['title']}</b>\n"
-        f"Дата: {fmt_date(s['date'])}\n"
-        f"Время: {s['time_start']}–{s['time_end'] or '?'}\n"
-        f"Место: {s['location']}\n"
-        f"{free_label}\n"
+        f"🎲 <b>{s['title']}</b>\n\n"
+        f"📅 {fmt_date(s['date'])} · 🕐 {time_line}\n"
+        f"📍 {s['location']}\n"
+        f"{free_label}\n\n"
     )
     if host_label:
         text += f"🎩 Хост: {host_label}\n"
-    text += (
-        f"👥 Записаны ({taken}/{s['max_slots']}): {players_label}\n"
-    )
+    text += players_block
     if s["is_subscriber_only"]:
         text += "\n⭐ Только для подписчиков «Проводник»."
 
