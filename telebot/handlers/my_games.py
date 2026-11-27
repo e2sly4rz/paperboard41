@@ -1,24 +1,23 @@
-from aiogram import F, Router
+from aiogram import Router, F
 from aiogram.types import CallbackQuery
 
 from database.queries import (
-    cancel_registration,
+    get_user_registrations_with_players,
     get_user,
-    list_user_registrations,
 )
-from keyboards.menus import main_menu, my_games_list
-from notifications import notify_game_author_cancellation
-from utils import is_host_or_admin, safe_edit
+from keyboards.menus import main_menu
+from utils import is_host_or_admin, fmt_date, safe_edit
 
 router = Router()
 
 
 @router.callback_query(F.data == "my_games")
 async def show_my_games(call: CallbackQuery) -> None:
-    regs = await list_user_registrations(call.from_user.id)
+    regs = await get_user_registrations_with_players(call.from_user.id)
     is_host_user = await is_host_or_admin(call.from_user.id)
     user = await get_user(call.from_user.id)
     is_provodnik = bool(user and user["subscriber_level"] in ("provodnik", "host"))
+
     if not regs:
         await safe_edit(
             call.message,
@@ -28,10 +27,46 @@ async def show_my_games(call: CallbackQuery) -> None:
         )
         await call.answer()
         return
+
+    # группировка по (дата, место)
+    groups: dict[tuple[str, str], list[dict]] = {}
+    for r in regs:
+        key = (r["date"], r["location"])
+        groups.setdefault(key, []).append(r)
+
+    lines = ["🎲 <b>Мои записи</b>"]
+    for (date, location), items in groups.items():
+        lines.append("")
+        lines.append(f"📅 <b>{fmt_date(date)}</b> · 📍 {location}")
+
+        for r in items:
+            time_range = f"{r['time_start']}–{r['time_end'] or '?'}"
+            lines.append(f"\n🕐 {time_range} · {r['title']}")
+
+            players = r.get("players", [])
+            if players:
+                player_lines = []
+                for p in players:
+                    name = p.get("first_name") or "Без имени"
+                    username = f" (@{p['username']})" if p.get("username") else ""
+                    if p.get("telegram_id") == call.from_user.id:
+                        player_lines.append("  • Вы")
+                    else:
+                        player_lines.append(f"  • {name}{username}")
+                lines.append("👥 Записаны:\n" + "\n".join(player_lines))
+            else:
+                lines.append("👥 Записаны: —")
+
+    text = "\n".join(lines).strip()
+    if len(text) > 3900:
+        text = text[:3890] + "\n\n<i>…список обрезан</i>"
+
     await safe_edit(
         call.message,
-        "Ваши записи (нажмите, чтобы отменить):",
-        reply_markup=my_games_list(regs),
+        text,
+        parse_mode="HTML",
+        reply_markup=main_menu(is_host_user, call.from_user.id,
+                               is_provodnik=is_provodnik),
     )
     await call.answer()
 

@@ -64,18 +64,6 @@ def session_card(session_id: int, night_id: int,
     return kb.as_markup()
 
 
-def my_games_list(regs: list[dict]) -> InlineKeyboardMarkup:
-    kb = InlineKeyboardBuilder()
-    for r in regs:
-        kb.button(
-            text=f"❌ {_fmt_date(r['date'])} {r['time_start']} — {r['title']}",
-            callback_data=f"cancel:{r['reg_id']}",
-        )
-    kb.button(text="⬅️ Назад", callback_data="back_main")
-    kb.adjust(1)
-    return kb.as_markup()
-
-
 # ---------- Меню организатора ----------
 
 def host_menu_with_nights(nights: list[dict],

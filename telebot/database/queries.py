@@ -1379,3 +1379,63 @@ async def get_session_with_registrations(session_id: int) -> dict | None:
         session["registrations"] = [dict(r) for r in await cur.fetchall()]
 
     return session
+
+async def get_user_registrations_with_players(user_id: int) -> list[dict]:
+    """Записи пользователя + все игроки на те же сессии.
+
+    Возвращает: [
+        {"reg_id": ..., "session_id": ...,
+         "date": ..., "location": ...,
+         "time_start": ..., "time_end": ...,
+         "title": ..., "genre": ...,
+         "players": [{"telegram_id": ..., "first_name": ..., "username": ...}, ...]},
+        ...
+    ]
+    """
+    async with db.conn.execute(
+        """SELECT r.id AS reg_id,
+                  gs.id AS session_id,
+                  gs.time_start, gs.time_end,
+                  gn.date, gn.location,
+                  g.title, g.genre
+           FROM registrations r
+           JOIN game_sessions gs ON gs.id = r.session_id
+           JOIN game_nights  gn ON gn.id = gs.game_night_id
+           JOIN games        g  ON g.id  = gs.game_id
+           WHERE r.user_telegram_id = ?
+             AND gn.date >= date('now')
+           ORDER BY gn.date, gs.time_start""",
+        (user_id,),
+    ) as cur:
+        regs = [dict(r) for r in await cur.fetchall()]
+
+    if not regs:
+        return []
+
+    session_ids = [r["session_id"] for r in regs]
+    placeholders = ",".join("?" * len(session_ids))
+
+    async with db.conn.execute(
+        f"""SELECT r.session_id,
+                   u.telegram_id, u.first_name, u.last_name, u.username
+            FROM registrations r
+            JOIN users u ON u.telegram_id = r.user_telegram_id
+            WHERE r.session_id IN ({placeholders})
+            ORDER BY r.registered_at""",
+        session_ids,
+    ) as cur:
+        players_rows = [dict(r) for r in await cur.fetchall()]
+
+    players_by_session: dict[int, list[dict]] = {}
+    for p in players_rows:
+        players_by_session.setdefault(p["session_id"], []).append({
+            "telegram_id": p["telegram_id"],
+            "first_name": p["first_name"],
+            "last_name": p["last_name"],
+            "username": p["username"],
+        })
+
+    for r in regs:
+        r["players"] = players_by_session.get(r["session_id"], [])
+
+    return regs
