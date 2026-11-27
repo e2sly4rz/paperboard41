@@ -1,34 +1,38 @@
-from aiogram import F, Router
+from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from database.db import db
 from database.queries import (
-    can_register_for_night,
-    find_session_conflict_for_user,
-    get_active_poll_for_night,
+    list_upcoming_nights,
     get_night,
     get_night_sessions_with_conflicts,
     get_session,
     get_session_with_registrations,
-    get_user,
-    list_cars,
-    list_upcoming_nights,
-    mark_availability_unavailable,
     register_for_session,
+    cancel_registration,
+    get_user,
+    get_active_poll_for_night,
     upsert_availability_response,
+    mark_availability_unavailable,
+    find_session_conflict_for_user,
+    can_register_for_night,
+    list_cars,
 )
 from keyboards.menus import (
-    main_menu,
     nights_list,
+    session_card,
+    main_menu,
     poll_time_grid,
     poll_time_grid_after,
-    session_card,
 )
-from notifications import notify_game_author_registration
 from states.states import PollTime
-from utils import fmt_date, is_host_or_admin, safe_edit
+from utils import is_host_or_admin, fmt_date, safe_edit
+from notifications import (
+    notify_game_author_registration,
+    notify_game_author_cancellation,
+)
 
 router = Router()
 
@@ -127,26 +131,6 @@ async def show_night(call: CallbackQuery) -> None:
                 if author_username:
                     host_label += f" (@{author_username})"
             else:
-                # fallback — хост ночи (если автор не указан)
-                if s.get("host_telegram_id") == call.from_user.id:
-                    host_label = "Вы"
-                else:
-                    host_label = ""  # нет данных — не показываем
-
-            host_part = f" · 🎩 {host_label}" if host_label else ""
-
-            # хост игры: автор сессии, иначе — хост ночи
-            author_id = s.get("created_by_user_id")
-            author_name = s.get("author_first_name")
-            author_username = s.get("author_username")
-
-            if author_id == call.from_user.id:
-                host_label = "Вы"
-            elif author_name:
-                host_label = author_name
-                if author_username:
-                    host_label += f" (@{author_username})"
-            else:
                 if s.get("host_telegram_id") == call.from_user.id:
                     host_label = "Вы"
                 else:
@@ -194,16 +178,13 @@ async def show_night(call: CallbackQuery) -> None:
     await call.answer()
 
 
-@router.callback_query(F.data.startswith("session:"))
-async def show_session(call: CallbackQuery) -> None:
-    session_id = int(call.data.split(":")[1])
+async def _render_session_card(call: CallbackQuery, session_id: int) -> None:
     s = await get_session_with_registrations(session_id)
     if not s:
         await call.answer("Сессия не найдена", show_alert=True)
         return
 
     user = await get_user(call.from_user.id)
-    level = user["subscriber_level"] if user else "passenger"
 
     async with db.conn.execute(
         "SELECT 1 FROM registrations WHERE session_id = ? AND user_telegram_id = ?",
@@ -212,34 +193,11 @@ async def show_session(call: CallbackQuery) -> None:
         already_registered = await cur.fetchone() is not None
 
     if already_registered:
-        await call.answer(
-            "✅ Вы уже записаны на эту игру.\n"
-            "Отменить запись можно в разделе «🎲 Мои записи».",
-            show_alert=True,
-        )
-        return
-
-    conflict = await find_session_conflict_for_user(session_id, call.from_user.id)
-    if conflict:
-        c_start = conflict["time_start"]
-        c_end = conflict["time_end"] or "?"
-        await call.answer(
-            f"⚠️ Пересекается с вашей записью:\n"
-            f"{conflict['game_title']} ({c_start}–{c_end}).\n"
-            f"Сначала отмените ту запись в «🎲 Мои записи».",
-            show_alert=True,
-        )
-        return
-
-    can, reason = await can_register_for_night(s["night_id"], call.from_user.id)
-    if not can:
-        await call.answer(reason, show_alert=True)
-        return
-
-    can_register = (
-        s["free_slots"] > 0
-        and (not s["is_subscriber_only"] or level in ("provodnik", "host"))
-    )
+        can_register = False
+        show_cancel = True
+    else:
+        can_register = True
+        show_cancel = False
 
     taken = s["max_slots"] - s["free_slots"]
     free_label = "🆓 Бесплатная игротека" if s.get("is_free") else "💰 Платная игротека"
@@ -262,8 +220,9 @@ async def show_session(call: CallbackQuery) -> None:
     # записанные
     regs = s.get("registrations", [])
     if not regs:
-        players_block = "👥 Записаны (0/{max}):\n• Пока никто не записан".format(
-            max=s["max_slots"]
+        players_block = (
+            f"👥 Записаны (0/{s['max_slots']}):\n"
+            f"• Пока никто не записан"
         )
     else:
         player_lines = []
@@ -285,7 +244,9 @@ async def show_session(call: CallbackQuery) -> None:
     )
     if host_label:
         text += f"🎩 Хост: {host_label}\n"
-    text += players_block
+    text += players_block + "\n"
+    if already_registered:
+        text += "\n✅ Вы записаны на эту игру.\n"
     if s["is_subscriber_only"]:
         text += "\n⭐ Только для подписчиков «Проводник»."
 
@@ -293,9 +254,63 @@ async def show_session(call: CallbackQuery) -> None:
         call.message,
         text,
         parse_mode="HTML",
-        reply_markup=session_card(session_id, s["night_id"], can_register),
+        reply_markup=session_card(session_id, s["night_id"],
+                                  can_register, show_cancel),
     )
+
+
+@router.callback_query(F.data.startswith("session:"))
+async def show_session(call: CallbackQuery) -> None:
+    session_id = int(call.data.split(":")[1])
+    await _render_session_card(call, session_id)
     await call.answer()
+
+
+@router.callback_query(F.data.startswith("cancel_session:"))
+async def cancel_session(call: CallbackQuery) -> None:
+    session_id = int(call.data.split(":")[1])
+
+    async with db.conn.execute(
+        "SELECT id FROM registrations WHERE session_id = ? AND user_telegram_id = ?",
+        (session_id, call.from_user.id),
+    ) as cur:
+        row = await cur.fetchone()
+
+    if not row:
+        await call.answer("Вы не записаны на эту игру", show_alert=True)
+        return
+
+    reg_id = row["id"]
+    cancelled = await cancel_registration(reg_id, call.from_user.id)
+    if not cancelled:
+        await call.answer("Не удалось отменить запись", show_alert=True)
+        return
+
+    await call.answer("❌ Запись отменена")
+
+    user = await get_user(call.from_user.id)
+    player_name = "Без имени"
+    if user:
+        name_parts = [user["first_name"] or "", user["last_name"] or ""]
+        player_name = " ".join(p for p in name_parts if p).strip() or "Без имени"
+        if user.get("username"):
+            player_name += f" (@{user['username']})"
+
+    await notify_game_author_cancellation(
+        call.bot,
+        cancelled["session_id"],
+        call.from_user.id,
+        game_title=cancelled["game_title"],
+        date_str=cancelled["date"],
+        location=cancelled["location"],
+        time_start=cancelled["time_start"],
+        time_end=cancelled["time_end"],
+        slots_taken=cancelled["slots_taken"],
+        max_slots=cancelled["max_slots"],
+        player_name=player_name,
+    )
+
+    await _render_session_card(call, session_id)
 
 
 @router.callback_query(F.data.startswith("reg:"))
@@ -312,20 +327,6 @@ async def do_register(call: CallbackQuery) -> None:
         return
 
     taken = s["max_slots"] - s["free_slots"]
-    text = (
-        f"🎲 <b>{s['title']}</b>\n"
-        f"Дата: {fmt_date(s['date'])}\n"
-        f"Время: {s['time_start']}–{s['time_end'] or '?'}\n"
-        f"Место: {s['location']}\n"
-        f"Занято мест: {taken} из {s['max_slots']}\n"
-        f"\n✅ Вы записаны!"
-    )
-    await safe_edit(
-        call.message,
-        text,
-        parse_mode="HTML",
-        reply_markup=session_card(session_id, s["night_id"], False),
-    )
 
     user = await get_user(call.from_user.id)
     player_name = "Без имени"
@@ -348,6 +349,8 @@ async def do_register(call: CallbackQuery) -> None:
         max_slots=s["max_slots"],
         player_name=player_name,
     )
+
+    await _render_session_card(call, session_id)
 
 
 # ---------- Опрос о времени ----------
